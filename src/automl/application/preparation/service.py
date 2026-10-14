@@ -208,12 +208,22 @@ class PreparationService:
         plan.touch()
         self.store.save_plan(plan)
 
+        touched_cols = sorted(list({str(c) for step in plan.steps for c in step.columns if c}))
+        rows_touched = abs(after["rows"] - before["rows"])
+
         return {
             "plan_id": plan.id,
+            "dataset_id": plan.dataset_id,
             "before": before,
             "after": after,
+            "before_row_count": before["rows"],
+            "before_col_count": before["columns"],
+            "after_row_count": after["rows"],
+            "after_col_count": after["columns"],
             "rows_delta": after["rows"] - before["rows"],
             "columns_delta": after["columns"] - before["columns"],
+            "touched_columns": touched_cols,
+            "rows_touched": rows_touched,
             "dataset_steps_applied_in_preview": dataset_steps_applied,
             "pipeline_steps_deferred": pipeline_steps,
             "warnings": warnings,

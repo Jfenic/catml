@@ -613,7 +613,32 @@ def _build_pipeline(
     if column_transforms:
         for ct in column_transforms:
             if isinstance(ct, dict) and "column" in ct:
-                col_transform_map[ct["column"]] = ct
+                col = ct["column"]
+                if col not in col_transform_map:
+                    col_transform_map[col] = dict(ct)
+                else:
+                    existing = col_transform_map[col]
+                    new_kind = str(ct.get("kind", "")).lower()
+                    existing_kind = str(existing.get("kind", "")).lower()
+                    if new_kind in ("impute", "imputation"):
+                        if "strategy" in ct:
+                            existing["strategy"] = ct["strategy"]
+                        if "params" in ct and isinstance(ct["params"], dict):
+                            existing_params = dict(existing.get("params", {}))
+                            existing_params.update(ct["params"])
+                            existing["params"] = existing_params
+                    elif existing_kind in ("impute", "imputation"):
+                        strat = existing.get("strategy")
+                        imputer_params = dict(existing.get("params", {}))
+                        merged = dict(ct)
+                        if strat:
+                            merged["strategy"] = strat
+                        merged_params = dict(merged.get("params", {}))
+                        merged_params.update(imputer_params)
+                        merged["params"] = merged_params
+                        col_transform_map[col] = merged
+                    else:
+                        col_transform_map[col] = dict(ct)
 
     transformers = []
     if numeric_cols:
@@ -624,22 +649,37 @@ def _build_pipeline(
                 kind = str(ct.get("kind", "")).lower()
                 params = dict(ct.get("params", {}))
 
+                scaler_params = {
+                    k: v
+                    for k, v in params.items()
+                    if k not in ("strategy", "fill_value", "missing_values", "kind", "column", "scaler", "method")
+                }
+
                 if kind in ("robust_scaler", "robust"):
-                    scaler_step = ("scaler", RobustScaler(**params))
+                    scaler_step = ("scaler", RobustScaler(**scaler_params))
                 elif kind in ("yeo_johnson", "power_transform", "power", "yeojohnson"):
-                    scaler_step = ("power", PowerTransformer(method="yeo-johnson", **params))
+                    scaler_step = ("power", PowerTransformer(method="yeo-johnson", **scaler_params))
                 elif kind in ("quantile_discretizer", "quantile", "kbins"):
-                    n_bins = int(params.get("n_bins", 5))
+                    n_bins = int(scaler_params.get("n_bins", 5))
                     scaler_step = ("discretize", KBinsDiscretizer(n_bins=n_bins, encode="ordinal", strategy="quantile"))
                 elif kind in ("standard_scaler", "standard"):
-                    scaler_step = ("scaler", StandardScaler(**params))
+                    scaler_step = ("scaler", StandardScaler(**scaler_params))
+                elif kind in ("passthrough", "none", "identity", "no_scaler"):
+                    scaler_step = ("scaler", "passthrough")
+                elif kind in ("impute", "imputation"):
+                    scaler_step = ("scaler", StandardScaler(**scaler_params))
                 else:
-                    scaler_step = ("scaler", StandardScaler(**params))
+                    scaler_step = ("scaler", StandardScaler(**scaler_params))
+
+                imputer_strategy = ct.get("strategy") or params.get("strategy") or "median"
+                imputer_kwargs: dict[str, Any] = {"strategy": imputer_strategy}
+                if "fill_value" in params:
+                    imputer_kwargs["fill_value"] = params["fill_value"]
 
                 transformers.append(
                     (
                         f"num_{kind}_{col}",
-                        Pipeline([("imputer", SimpleImputer(strategy="median")), scaler_step]),
+                        Pipeline([("imputer", SimpleImputer(**imputer_kwargs)), scaler_step]),
                         [col],
                     )
                 )
@@ -655,16 +695,42 @@ def _build_pipeline(
                 )
             )
     if categorical_cols:
-        transformers.append(
-            (
-                "cat",
-                Pipeline([
-                    ("imputer", SimpleImputer(strategy="most_frequent")),
-                    ("encoder", OneHotEncoder(handle_unknown="ignore")),
-                ]),
-                categorical_cols,
+        standard_cat_cols = []
+        for col in categorical_cols:
+            if col in col_transform_map:
+                ct = col_transform_map[col]
+                kind = str(ct.get("kind", "")).lower()
+                params = dict(ct.get("params", {}))
+                cat_strat = ct.get("strategy") or params.get("strategy") or "most_frequent"
+                if cat_strat in ("median", "mean"):
+                    cat_strat = "most_frequent"
+                cat_imputer_kwargs: dict[str, Any] = {"strategy": cat_strat}
+                if "fill_value" in params:
+                    cat_imputer_kwargs["fill_value"] = params["fill_value"]
+                transformers.append(
+                    (
+                        f"cat_{kind}_{col}",
+                        Pipeline([
+                            ("imputer", SimpleImputer(**cat_imputer_kwargs)),
+                            ("encoder", OneHotEncoder(handle_unknown="ignore")),
+                        ]),
+                        [col],
+                    )
+                )
+            else:
+                standard_cat_cols.append(col)
+
+        if standard_cat_cols:
+            transformers.append(
+                (
+                    "cat",
+                    Pipeline([
+                        ("imputer", SimpleImputer(strategy="most_frequent")),
+                        ("encoder", OneHotEncoder(handle_unknown="ignore")),
+                    ]),
+                    standard_cat_cols,
+                )
             )
-        )
     if text_cols:
         for col in text_cols:
             transformers.append(

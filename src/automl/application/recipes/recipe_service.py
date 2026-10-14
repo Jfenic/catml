@@ -141,6 +141,26 @@ class RecipeService:
             if not model_ids:
                 model_ids = list(spec.model_ids)
 
+        if not column_transforms and dataset_id:
+            try:
+                from automl.domain.preparation.pipeline_bridge import (
+                    pipeline_steps_to_column_transforms,
+                )
+                from automl.infrastructure.preparation.json_store import JsonPreparationStore
+
+                prep_store = JsonPreparationStore(self.workspace.root_dir)
+                version = prep_store.find_version_for_dataset(dataset_id)
+                if not version:
+                    ds = self.workspace.get_dataset(dataset_id)
+                    if ds and hasattr(ds, "path"):
+                        version = prep_store.find_version_by_path(str(ds.path))
+                if version and version.lineage and version.lineage.get("pipeline_steps"):
+                    column_transforms = pipeline_steps_to_column_transforms(
+                        version.lineage["pipeline_steps"]
+                    )
+            except Exception:
+                pass
+
         if not drop_features and isinstance(hypothesis.experiment_delta, dict):
             drop_features = list(hypothesis.experiment_delta.get("drop_features", []))
 

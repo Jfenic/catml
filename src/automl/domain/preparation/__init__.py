@@ -9,6 +9,7 @@ from automl.domain.preparation.models import (
     QualityIssue,
     QualityReport,
 )
+from automl.domain.preparation.pipeline_bridge import pipeline_steps_to_column_transforms
 from automl.domain.preparation.validation import (
     PreparationValidationError,
     assert_step_scope_legal,
@@ -25,5 +26,6 @@ __all__ = [
     "QualityIssue",
     "QualityReport",
     "assert_step_scope_legal",
+    "pipeline_steps_to_column_transforms",
     "validate_plan",
 ]

@@ -1066,6 +1066,90 @@ def main(argv: list[str] | None = None) -> int:
     rcp_archive.add_argument("--json", action="store_true", help="Output result as JSON")
     rcp_archive.set_defaults(func=run_recipe_cli)
 
+    # Data Preparation subparsers
+    data_parser = sub.add_parser("data", help="Inspect data quality and manage reproducible preparation plans")
+    data_sub = data_parser.add_subparsers(dest="data_action", required=True)
+    from automl.interfaces.cli.data_cli import run_data_cli
+
+    # data inspect
+    data_inspect = data_sub.add_parser("inspect", help="Inspect dataset quality, missing values, constants, and schema anomalies")
+    data_inspect.add_argument("dataset_id", nargs="?", default=None, help="Dataset ID to inspect")
+    data_inspect.add_argument("--dataset", "-d", default=None, help="Dataset ID alias")
+    data_inspect.add_argument("--workspace", default=None, help="Path to workspace root")
+    data_inspect.add_argument("--json", action="store_true", help="Output quality report as JSON")
+    data_inspect.set_defaults(func=run_data_cli)
+
+    # data prepare
+    data_prep = data_sub.add_parser("prepare", help="Manage reproducible data preparation plans and versions")
+    data_prep_sub = data_prep.add_subparsers(dest="prepare_action", required=True)
+
+    # data prepare suggest
+    prep_suggest = data_prep_sub.add_parser("suggest", help="Suggest a typed preparation plan based on diagnostics")
+    prep_suggest.add_argument("dataset_id", nargs="?", default=None, help="Target dataset ID")
+    prep_suggest.add_argument("--dataset", "-d", default=None, help="Target dataset ID alias")
+    prep_suggest.add_argument("--name", "-n", default=None, help="Optional plan name")
+    prep_suggest.add_argument("--no-pipeline-marks", action="store_true", help="Exclude pipeline-scoped imputation/scaling steps")
+    prep_suggest.add_argument("--workspace", default=None, help="Path to workspace root")
+    prep_suggest.add_argument("--json", action="store_true", help="Output plan as JSON")
+    prep_suggest.set_defaults(func=run_data_cli)
+
+    # data prepare preview
+    prep_preview = data_prep_sub.add_parser("preview", help="Preview plan effect without mutating stored dataset")
+    prep_preview.add_argument("plan_id", help="Plan ID to preview")
+    prep_preview.add_argument("--workspace", default=None, help="Path to workspace root")
+    prep_preview.add_argument("--json", action="store_true", help="Output preview as JSON")
+    prep_preview.set_defaults(func=run_data_cli)
+
+    # data prepare validate
+    prep_val = data_prep_sub.add_parser("validate", help="Validate plan scopes and integrity")
+    prep_val.add_argument("plan_id", help="Plan ID to validate")
+    prep_val.add_argument("--workspace", default=None, help="Path to workspace root")
+    prep_val.add_argument("--json", action="store_true", help="Output validation as JSON")
+    prep_val.set_defaults(func=run_data_cli)
+
+    # data prepare apply
+    prep_apply = data_prep_sub.add_parser("apply", help="Apply plan to produce a new immutable dataset version")
+    prep_apply.add_argument("plan_id", help="Plan ID to apply")
+    prep_apply.add_argument("--approve", "--approved", "-y", "--yes", action="store_true", help="Approve destructive or semantic steps")
+    prep_apply.add_argument("--notes", default=None, help="Audit notes")
+    prep_apply.add_argument("--workspace", default=None, help="Path to workspace root")
+    prep_apply.add_argument("--json", action="store_true", help="Output applied result as JSON")
+    prep_apply.set_defaults(func=run_data_cli)
+
+    # data prepare create
+    prep_create = data_prep_sub.add_parser("create", help="Create an explicit preparation plan from step definitions")
+    prep_create.add_argument("dataset_id", nargs="?", default=None, help="Target dataset ID")
+    prep_create.add_argument("--dataset", "-d", default=None, help="Target dataset ID alias")
+    prep_create.add_argument("--steps", required=True, help="JSON array of step objects or path to JSON file")
+    prep_create.add_argument("--name", "-n", default=None, help="Plan name")
+    prep_create.add_argument("--notes", default=None, help="Plan notes")
+    prep_create.add_argument("--workspace", default=None, help="Path to workspace root")
+    prep_create.add_argument("--json", action="store_true", help="Output result as JSON")
+    prep_create.set_defaults(func=run_data_cli)
+
+    # data prepare plans
+    prep_plans = data_prep_sub.add_parser("plans", help="List preparation plans")
+    prep_plans.add_argument("dataset_id", nargs="?", default=None, help="Filter by dataset ID")
+    prep_plans.add_argument("--dataset", "-d", default=None, help="Filter by dataset ID alias")
+    prep_plans.add_argument("--workspace", default=None, help="Path to workspace root")
+    prep_plans.add_argument("--json", action="store_true", help="Output plans as JSON")
+    prep_plans.set_defaults(func=run_data_cli)
+
+    # data prepare show-plan
+    prep_show = data_prep_sub.add_parser("show-plan", help="Show full details of a preparation plan")
+    prep_show.add_argument("plan_id", help="Plan ID to show")
+    prep_show.add_argument("--workspace", default=None, help="Path to workspace root")
+    prep_show.add_argument("--json", action="store_true", help="Output plan details as JSON")
+    prep_show.set_defaults(func=run_data_cli)
+
+    # data prepare versions
+    prep_vers = data_prep_sub.add_parser("versions", help="List immutable dataset versions produced from parent dataset")
+    prep_vers.add_argument("parent_dataset_id", nargs="?", default=None, help="Parent dataset ID")
+    prep_vers.add_argument("--parent", default=None, help="Parent dataset ID alias")
+    prep_vers.add_argument("--workspace", default=None, help="Path to workspace root")
+    prep_vers.add_argument("--json", action="store_true", help="Output versions as JSON")
+    prep_vers.set_defaults(func=run_data_cli)
+
     args = parser.parse_args(argv)
     return args.func(args)
 

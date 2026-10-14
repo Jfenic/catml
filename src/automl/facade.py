@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import contextlib
 import tempfile
 import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
 import numpy as np
 import pandas as pd
 
@@ -183,27 +185,48 @@ class AutoML:
             AutoMLResult containing the winning model, leaderboard, and predictions.
         """
         fit_started = time.perf_counter()
-        df, target_col = self._standardize_input(data, target)
+        ws, cmd, _qry = self._get_application()
 
-        resolved_task_type = self._resolve_task_type(df[target_col])
+        dataset = None
+        if isinstance(data, str):
+            is_path_like = False
+            try:
+                is_path_like = Path(data).exists() or any(
+                    data.lower().endswith(ext)
+                    for ext in (".csv", ".parquet", ".pq", ".json", ".jsonl", ".tsv")
+                )
+            except (OSError, ValueError):
+                is_path_like = False
 
-        # Provision workspace (temp dirs are owned by this instance and cleaned on close/GC)
-        if self.workspace_dir:
-            self.workspace_dir.mkdir(parents=True, exist_ok=True)
-            ws_root = self.workspace_dir
+            if not is_path_like:
+                try:
+                    ds_obj = ws.get_dataset(data)
+                    if ds_obj is not None:
+                        from automl.engine.profiling.dataset_profiler import load_dataframe
+
+                        dataset = ds_obj
+                        df = load_dataframe(dataset.path)
+                        target_col = target if isinstance(target, str) else ds_obj.target_column
+                except Exception:
+                    dataset = None
+
+        if dataset is None:
+            df, target_col = self._standardize_input(data, target)
+            resolved_task_type = self._resolve_task_type(df[target_col])
+            dataset = ws.register_dataset(
+                name="fit_dataset",
+                path=df,
+                target=target_col,
+                task_type=resolved_task_type.value,
+            )
         else:
-            if self._temp_workspace is None:
-                self._temp_workspace = tempfile.TemporaryDirectory(prefix="catml_fit_")
-            ws_root = Path(self._temp_workspace.name)
-
-        ws, cmd, qry = build_application(root_dir=str(ws_root))
-
-        dataset = ws.register_dataset(
-            name="fit_dataset",
-            path=df,
-            target=target_col,
-            task_type=resolved_task_type.value,
-        )
+            if not target_col or target_col not in df.columns:
+                raise ValueError(
+                    f"Target column '{target_col}' not found in registered dataset '{data}'."
+                    if target_col
+                    else f"Target column must be specified or present on registered dataset '{data}'."
+                )
+            resolved_task_type = self._resolve_task_type(df[target_col])
 
         resolved_group_col = group_column or self.group_column
         resolved_image_cols = list(image_columns) if image_columns is not None else (list(self.image_columns) if self.image_columns is not None else None)
@@ -311,7 +334,7 @@ class AutoML:
                 trial_obj = ws.get_trial(best_so_far.trial_id)
                 if trial_obj is not None:
                     n_trials = max(3, min(40, int(remaining // 8)))
-                    try:
+                    with contextlib.suppress(Exception):
                         cmd.dispatch(
                             OptimizeExperimentCommand(
                                 run_id=run.id,
@@ -322,9 +345,7 @@ class AutoML:
                                 timeout_seconds=remaining,
                             )
                         )
-                    except Exception:
                         # Baseline fit already succeeded; HPO is best-effort under budget.
-                        pass
                     raw_leaderboard = ws.get_leaderboard_results(run.id, include_failed=False)
                     valid_leaderboard = [r for r in raw_leaderboard if r.succeeded] or valid_leaderboard
 
@@ -447,6 +468,25 @@ class AutoML:
             return TaskType.parse(t)
         return infer_task_type(target_series)
 
+    def _get_application(self) -> tuple[Any, Any, Any]:
+        """Return (AutoMLWorkspace, CommandBus, QueryBus) for this AutoML instance."""
+        if self.workspace_dir:
+            self.workspace_dir.mkdir(parents=True, exist_ok=True)
+            ws_root = self.workspace_dir
+        else:
+            if self._temp_workspace is None:
+                self._temp_workspace = tempfile.TemporaryDirectory(prefix="catml_fit_")
+            ws_root = Path(self._temp_workspace.name)
+
+        return build_application(root_dir=str(ws_root))
+
+    @property
+    def prepare(self) -> AutoMLPreparationFacade:
+        """
+        Data Preparation facade for quality inspection and reproducible preparation plans.
+        """
+        return AutoMLPreparationFacade(self)
+
     def close(self) -> None:
         """Remove a temporary fit workspace created when ``workspace_dir`` was omitted."""
         if self._temp_workspace is not None:
@@ -460,7 +500,218 @@ class AutoML:
         self.close()
 
     def __del__(self) -> None:
-        try:
+        with contextlib.suppress(Exception):
             self.close()
-        except Exception:
-            pass
+
+
+class AutoMLPreparationFacade:
+    """
+    Thin, scikit-learn ergonomic facade for data quality analysis and reproducible preparation plans.
+    Operates strictly via CommandBus and QueryBus (Rule 3: Parity Principle).
+
+    Can be accessed either as a namespace:
+        >>> automl = AutoML()
+        >>> report = automl.prepare.analyze(df)
+        >>> plan = automl.prepare.suggest(df)
+        >>> preview = automl.prepare.preview(plan["id"])
+        >>> applied = automl.prepare.apply(plan["id"], approved=True)
+
+    Or invoked directly as a convenience method:
+        >>> applied = automl.prepare(df, target="churn", approve=True)
+    """
+
+    def __init__(self, automl: AutoML) -> None:
+        self._automl = automl
+
+    def _get_app(self) -> tuple[Any, Any, Any]:
+        return self._automl._get_application()
+
+    def _resolve_dataset_id(
+        self,
+        data: pd.DataFrame | np.ndarray | str | Path | None = None,
+        target: str | pd.Series | np.ndarray | None = None,
+        dataset_id: str | None = None,
+    ) -> str:
+        if dataset_id:
+            return dataset_id
+        if data is None:
+            raise ValueError("Either `data` or `dataset_id` must be provided.")
+
+        ws, _cmd, _qry = self._get_app()
+
+        if isinstance(data, str):
+            is_path_like = False
+            try:
+                is_path_like = Path(data).exists() or any(
+                    data.lower().endswith(ext)
+                    for ext in (".csv", ".parquet", ".pq", ".json", ".jsonl", ".tsv")
+                )
+            except (OSError, ValueError):
+                is_path_like = False
+
+            if not is_path_like:
+                try:
+                    existing = ws.get_dataset(data)
+                    if existing:
+                        return existing.id
+                except Exception:
+                    pass
+                raise ValueError(f"Dataset '{data}' not found in workspace and is not an existing file path.")
+
+        if target is not None:
+            df, target_col = self._automl._standardize_input(data, target)
+        else:
+            if isinstance(data, (Path, str)) and (Path(data).exists() or any(str(data).lower().endswith(ext) for ext in (".csv", ".parquet", ".pq", ".json", ".jsonl", ".tsv"))):
+                from automl.engine.profiling.dataset_profiler import load_dataframe
+                df = load_dataframe(data)
+            elif isinstance(data, pd.DataFrame):
+                df = data.copy()
+            elif isinstance(data, np.ndarray):
+                feature_cols = [f"feature_{i}" for i in range(data.shape[1])]
+                df = pd.DataFrame(data, columns=feature_cols)
+            else:
+                raise TypeError(f"Unsupported input data type: {type(data)}")
+            target_col = None
+
+        task_type = None
+        if target_col and target_col in df.columns:
+            try:
+                task_type = self._automl._resolve_task_type(df[target_col]).value
+            except Exception:
+                task_type = None
+
+        ds = ws.register_dataset(
+            name=f"prep_ds_{uuid.uuid4().hex[:8]}",
+            path=df,
+            target=target_col,
+            task_type=task_type,
+        )
+        return ds.id
+
+    def analyze(
+        self,
+        data: pd.DataFrame | np.ndarray | str | Path | None = None,
+        target: str | pd.Series | np.ndarray | None = None,
+        dataset_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Analyze dataset quality and return actionable issues."""
+        from automl.application.preparation.commands import AnalyzeDataQualityCommand
+
+        ds_id = self._resolve_dataset_id(data, target=target, dataset_id=dataset_id)
+        _ws, cmd, _qry = self._get_app()
+        return cmd.dispatch(AnalyzeDataQualityCommand(dataset_id=ds_id))
+
+    def suggest(
+        self,
+        data: pd.DataFrame | np.ndarray | str | Path | None = None,
+        target: str | pd.Series | np.ndarray | None = None,
+        dataset_id: str | None = None,
+        name: str | None = None,
+        include_pipeline_marks: bool = True,
+    ) -> dict[str, Any]:
+        """Suggest a typed preparation plan based on quality diagnostics."""
+        from automl.application.preparation.commands import SuggestPreparationPlanCommand
+
+        ds_id = self._resolve_dataset_id(data, target=target, dataset_id=dataset_id)
+        _ws, cmd, _qry = self._get_app()
+        return cmd.dispatch(
+            SuggestPreparationPlanCommand(
+                dataset_id=ds_id,
+                name=name,
+                include_pipeline_marks=include_pipeline_marks,
+            )
+        )
+
+    def preview(self, plan_id: str) -> dict[str, Any]:
+        """Preview plan effect without mutating stored dataset (purity guaranteed)."""
+        from automl.application.preparation.commands import PreviewPreparationPlanCommand
+
+        _ws, cmd, _qry = self._get_app()
+        return cmd.dispatch(PreviewPreparationPlanCommand(plan_id=plan_id))
+
+    def validate(self, plan_id: str) -> dict[str, Any]:
+        """Validate preparation plan scopes and constraints."""
+        from automl.application.preparation.commands import ValidatePreparationPlanCommand
+
+        _ws, cmd, _qry = self._get_app()
+        return cmd.dispatch(ValidatePreparationPlanCommand(plan_id=plan_id))
+
+    def apply(
+        self,
+        plan_id: str,
+        approved: bool = False,
+        notes: str | None = None,
+    ) -> dict[str, Any]:
+        """Apply approved dataset-scoped operations to produce a new immutable dataset version."""
+        from automl.application.preparation.commands import ApplyPreparationPlanCommand
+
+        _ws, cmd, _qry = self._get_app()
+        return cmd.dispatch(ApplyPreparationPlanCommand(plan_id=plan_id, approved=approved, notes=notes))
+
+    def create(
+        self,
+        dataset_id: str,
+        steps: list[dict[str, Any]] | tuple[dict[str, Any], ...],
+        name: str | None = None,
+        notes: str | None = None,
+    ) -> str:
+        """Create an explicit preparation plan from step specifications."""
+        from automl.application.preparation.commands import CreatePreparationPlanCommand
+
+        _ws, cmd, _qry = self._get_app()
+        return cmd.dispatch(
+            CreatePreparationPlanCommand(
+                dataset_id=dataset_id,
+                steps=tuple(steps),
+                name=name,
+                notes=notes,
+            )
+        )
+
+    def get_plan(self, plan_id: str) -> dict[str, Any] | None:
+        """Retrieve preparation plan details by ID."""
+        from automl.application.preparation.queries import GetPreparationPlanQuery
+
+        _ws, _cmd, qry = self._get_app()
+        return qry.dispatch(GetPreparationPlanQuery(plan_id=plan_id))
+
+    def list_plans(self, dataset_id: str | None = None) -> list[dict[str, Any]]:
+        """List preparation plans, optionally filtered by dataset ID."""
+        from automl.application.preparation.queries import ListPreparationPlansQuery
+
+        _ws, _cmd, qry = self._get_app()
+        return qry.dispatch(ListPreparationPlansQuery(dataset_id=dataset_id))
+
+    def list_versions(self, parent_dataset_id: str) -> list[dict[str, Any]]:
+        """List immutable dataset versions produced from parent dataset."""
+        from automl.application.preparation.queries import ListDatasetVersionsQuery
+
+        _ws, _cmd, qry = self._get_app()
+        return qry.dispatch(ListDatasetVersionsQuery(parent_dataset_id=parent_dataset_id))
+
+    def get_version(self, version_id: str) -> dict[str, Any] | None:
+        """Retrieve dataset version details by ID."""
+        from automl.application.preparation.queries import GetDatasetVersionQuery
+
+        _ws, _cmd, qry = self._get_app()
+        return qry.dispatch(GetDatasetVersionQuery(version_id=version_id))
+
+    def __call__(
+        self,
+        data: pd.DataFrame | np.ndarray | str | Path,
+        target: str | pd.Series | np.ndarray | None = None,
+        approve: bool = True,
+        notes: str | None = None,
+    ) -> dict[str, Any]:
+        """
+        Convenience execution: analyze → suggest → validate → apply plan.
+        Returns the applied result dictionary with version_id and path.
+        """
+        ds_id = self._resolve_dataset_id(data, target=target)
+        suggested = self.suggest(dataset_id=ds_id)
+        plan_id = suggested["id"]
+        val = self.validate(plan_id)
+        if not val.get("ok"):
+            raise ValueError(f"Plan validation failed: {val.get('errors')}")
+        return self.apply(plan_id, approved=approve, notes=notes)
+

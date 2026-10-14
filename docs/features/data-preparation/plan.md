@@ -22,9 +22,9 @@
 
 ### P2 — CLI + Python facade
 
-- [ ] `catml data inspect|prepare …`  
-- [ ] Public `catml` / `AutoML` prepare surface (thin)  
-- [ ] Wire pipeline-scoped steps into experiment/recipe config (no full-frame fit)
+- [x] `catml data inspect|prepare …`  
+- [x] Public `catml` / `AutoML` prepare surface (thin)  
+- [x] Wire pipeline-scoped steps into experiment/recipe config (no full-frame fit)
 
 ### P3 — MCP + Workbench adapters
 

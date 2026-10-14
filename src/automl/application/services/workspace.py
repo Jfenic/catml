@@ -579,6 +579,25 @@ class AutoMLWorkspace:
                         except json.JSONDecodeError:
                             pass
                         break
+
+        if not resolved_column_transforms:
+            try:
+                from automl.domain.preparation.pipeline_bridge import (
+                    pipeline_steps_to_column_transforms,
+                )
+                from automl.infrastructure.preparation.json_store import JsonPreparationStore
+
+                prep_store = JsonPreparationStore(self.root_dir)
+                version = prep_store.find_version_for_dataset(run.dataset_id)
+                if not version and dataset and hasattr(dataset, "path"):
+                    version = prep_store.find_version_by_path(str(dataset.path))
+                if version and version.lineage and version.lineage.get("pipeline_steps"):
+                    resolved_column_transforms = pipeline_steps_to_column_transforms(
+                        version.lineage["pipeline_steps"]
+                    )
+            except Exception:
+                pass
+
         profile = self.repository.get_dataset_profile(run.dataset_id)
         effective_group = group_column or run.config.group_column
         exclude_cols = [effective_group] if effective_group else None

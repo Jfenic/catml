@@ -1,5 +1,16 @@
 # Progress
 
+### Data Preparation P2 — CLI, facade prepare, fold-safe pipeline bridging & recipe parity (2026-10-14)
+
+- **Domain**: `pipeline_steps_to_column_transforms` in `domain/preparation/pipeline_bridge.py` mapping pipeline-scoped steps (`MARK_IMPUTE`, `MARK_SCALE`) into trainer column transforms.
+- **Application & Wiring**:
+  - `AutoMLWorkspace.create_experiment`: automatically resolves pipeline-scoped steps from version lineage of prepared datasets.
+  - `RecipeService`: inherits pipeline-scoped column transforms when generating recipes from prepared dataset experiments.
+- **Engine**: `sklearn_trainer.py` updated to support custom imputer strategies and categorical column transforms without leaky pre-split computation, plus protective fallback for string categorical imputers.
+- **Facade**: `AutoMLPreparationFacade` in `src/automl/facade.py` providing scikit-learn ergonomic access (`automl.prepare(...)` callable + `.analyze`, `.suggest`, `.preview`, `.validate`, `.apply`, `.create`, `.get_plan`, `.list_plans`, `.get_version`, `.list_versions`), with robust dataset ID resolution and error reporting.
+- **CLI**: `automl data inspect` and `automl data prepare {suggest,preview,validate,apply,create,plans,show-plan,versions}` registered and verified with human-readable and `--json` outputs, safe parsing for large inline JSON step definitions (>255 chars), and full `--parent` alias support.
+- **Tests**: `tests/test_data_preparation_p2.py` with 8 comprehensive integration tests covering CLI text/JSON lifecycle, facade methods, fold safety, recipe parity, error boundaries, and static mypy/ruff checks (all green).
+
 ### Focus → product robustness (2026-10-14)
 
 - Confirmed **`0.9.0rc1` on TestPyPI + PyPI** (GitHub `v0.9.0rc1`); TASKS publish rows marked Done.

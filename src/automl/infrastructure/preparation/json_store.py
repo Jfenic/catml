@@ -52,3 +52,21 @@ class JsonPreparationStore:
             if ver.parent_dataset_id == parent_dataset_id:
                 out.append(ver)
         return out
+
+    def find_version_for_dataset(self, dataset_id: str) -> DatasetVersion | None:
+        """Find the DatasetVersion that produced registered_dataset_id or has id == dataset_id."""
+        for path in sorted(self.versions_dir.glob("dsver_*.json")):
+            ver = DatasetVersion.from_dict(json.loads(path.read_text(encoding="utf-8")))
+            if ver.registered_dataset_id == dataset_id or ver.id == dataset_id:
+                return ver
+        return None
+
+    def find_version_by_path(self, file_path: str | Path) -> DatasetVersion | None:
+        """Find the DatasetVersion whose output path matches the given file path."""
+        target_path = str(Path(file_path).resolve())
+        for path in sorted(self.versions_dir.glob("dsver_*.json")):
+            ver = DatasetVersion.from_dict(json.loads(path.read_text(encoding="utf-8")))
+            if str(Path(ver.path).resolve()) == target_path:
+                return ver
+        return None
+

@@ -77,7 +77,7 @@ Fuente del estado operativo y del backlog. Las guías y los planes enlazan aquí
 | Priority | Item | Status |
 | --- | --- | --- |
 | P0 | **Honesty & leakage residual**: OOF blending holdout validation; pip-audit hard-fail opcional; stacking holdout residual | Open |
-| P0 | **Data Prep P2**: CLI + facade `prepare` + wire pipeline-scoped steps into recipes | Open (P1 done) |
+| P0 | **Data Prep P2**: CLI + facade `prepare` + wire pipeline-scoped steps into recipes | Done (P1+P2 done) |
 | P1 | **Provenance**: trial/run metadata (seeds, CV fold ids, content hash) on export/leaderboard | Open |
 | P1 | **Facade slim**: deeper `workspace.py` decomposition (más servicios; menos God-object) | Open (debt) |
 | P1 | **Quality debt**: application mypy gradual; ESLint warnings cleanup; `feature_selection_v05` bench | Open |
@@ -247,7 +247,7 @@ Fuente del estado operativo y del backlog. Las guías y los planes enlazan aquí
 - [x] Publish PyPI `0.9.0rc1` (TestPyPI + PyPI + GitHub release `v0.9.0rc1`).
 - [ ] Stable PyPI `0.9.0` after agreed robustness gates (Focus above).
 
-Open product backlog (see [Next / Roadmap Phases](#next-roadmap-phases) and **Focus — Product robustness**): OOF holdout validation; trial provenance metadata; Data Prep P2/P3; `feature_selection_v05` benchmark; advanced meta-learning *policies*; historical branch cleanup; deeper `workspace.py` decomposition.
+Open product backlog (see [Next / Roadmap Phases](#next-roadmap-phases) and **Focus — Product robustness**): OOF holdout validation; trial provenance metadata; Data Prep P3 (P1+P2 done); `feature_selection_v05` benchmark; advanced meta-learning *policies*; historical branch cleanup; deeper `workspace.py` decomposition.
 
 ## Completed Phase: v0.8.2 Phase 2 — Ingestion Polymorphism, Strict CQRS Boundaries & Application Services Decomposition
 
@@ -678,6 +678,7 @@ Open product backlog (see [Next / Roadmap Phases](#next-roadmap-phases) and **Fo
 - [x] **Study B lift phase** — verify→recipe→fit; FakeLLM agent (`#122`); smoke 24/0/0.
 - [x] **Data Preparation direction documented** — [spec](docs/features/data-preparation/spec.md), [plan](docs/features/data-preparation/plan.md), [ADR-012](docs/decisions/012-data-preparation-subsystem.md); implement post-rc1 (not blocking load→train).
 - [x] **Data Preparation P1 (core)** — domain + `PreparationService` + CQRS + versions (`feat/data-preparation-p1`); CLI/facade = P2.
+- [x] **Data Preparation P2 (interfaces & wiring)** — CLI (`automl data inspect/prepare`), Python facade (`AutoML.prepare` callable & methods), fold-safe `pipeline_steps_to_column_transforms` bridge, recipe parity, and full test suite (`tests/test_data_preparation_p2.py`).
 - [x] **MCP `--allow-mutations` / autonomous local mode** — blackboard [#114](https://github.com/Jfenic/catml/issues/114) (PR `fix/mcp-allow-mutations-text-svd`; default stays require-approval).
 - [x] **Text LSA (TruncatedSVD) after TF-IDF** — part of [#115](https://github.com/Jfenic/catml/issues/115) (MLP max_iter still open if needed).
 - [x] Sincronizar el índice y los planes con las capacidades actuales (revisión 2026-10-11): H0–H5, Explore E0–E6, Experiment Recipes R0–R4, stacking/OOF multi-modelo y release `0.9.0-rc1` alineados en `AGENTS.md`, `docs/README.md`, feature plans/specs, ADR-009 y `MASTER_PLAN.md`.
