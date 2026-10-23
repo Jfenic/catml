@@ -772,6 +772,28 @@ class AutoMLWorkspace:
                 "estimator_class": arts.get("estimator_class"),
                 "backend": arts.get("backend"),
                 "fallback_backend": arts.get("fallback_backend"),
+                "seed": arts.get("seed"),
+                "validation_strategy": arts.get("validation_strategy"),
+                "cv_folds": arts.get("cv_folds"),
+                "cv_fold_ids": arts.get("cv_fold_ids"),
+                "cv_fold_assignment_hash": arts.get("cv_fold_assignment_hash"),
+                "dataset_content_hash": arts.get("dataset_content_hash"),
+                "config_hash": arts.get("config_hash"),
+                "provenance": {
+                    "seed": arts.get("seed"),
+                    "validation_strategy": arts.get("validation_strategy"),
+                    "cv_folds": arts.get("cv_folds"),
+                    "cv_fold_ids": arts.get("cv_fold_ids"),
+                    "cv_fold_assignment_hash": arts.get("cv_fold_assignment_hash"),
+                    "dataset_content_hash": arts.get("dataset_content_hash"),
+                    "config_hash": arts.get("config_hash"),
+                    "estimator_class": arts.get("estimator_class"),
+                    "estimator_module": arts.get("estimator_module"),
+                    "backend_class": arts.get("backend_class") or arts.get("estimator_class"),
+                    "backend_module": arts.get("backend_module") or arts.get("estimator_module"),
+                    "library_versions": arts.get("library_versions"),
+                    "backend": arts.get("backend"),
+                },
             })
         return out
 

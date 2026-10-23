@@ -78,7 +78,7 @@ Fuente del estado operativo y del backlog. Las guías y los planes enlazan aquí
 | --- | --- | --- |
 | P0 | **Honesty & leakage residual**: OOF blending holdout validation; pip-audit hard-fail opcional; stacking holdout residual | Done |
 | P0 | **Data Prep P2**: CLI + facade `prepare` + wire pipeline-scoped steps into recipes | Done (P1+P2 done) |
-| P1 | **Provenance**: trial/run metadata (seeds, CV fold ids, content hash) on export/leaderboard | Open |
+| P1 | **Provenance**: trial/run metadata (seeds, CV fold ids, content hash) on export/leaderboard | Done |
 | P1 | **Facade slim**: deeper `workspace.py` decomposition (más servicios; menos God-object) | Open (debt) |
 | P1 | **Quality debt**: application mypy gradual; ESLint warnings cleanup; `feature_selection_v05` bench | Open |
 | P2 | Stable PyPI **`0.9.0`** when robustness gates agreed | Open (rc1 already shipped) |
@@ -711,7 +711,7 @@ Open product backlog (see [Next / Roadmap Phases](#next-roadmap-phases) and **Fo
 - [ ] Advanced meta-learning *policies* (transform priors by fingerprint, richer warm-start beyond Phase 1): backlog.
 
 - [x] Stacking with a trained meta-estimator (distinct from voting/blending).
-- [ ] Persist backend class, plugin/library versions and dataset/config hashes per trial ([current limits](docs/backends.md)).
+- [x] Persist backend class, plugin/library versions and dataset/config hashes per trial ([current limits](docs/backends.md)).
 - [ ] Add the dedicated `feature_selection_v05` benchmark scenario from the feature-discovery specification.
 
 ### Generalist AutoML Engine & Super-Ensembles

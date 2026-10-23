@@ -71,6 +71,13 @@ def build_execution_spec(
         or ""
     )
 
+    if dataset_content_hash is None and dataset is not None:
+        dataset_content_hash = getattr(dataset, "content_hash", None)
+        if not dataset_content_hash and hasattr(dataset, "path") and dataset.path:
+            from automl.domain.datasets.content_hash import try_compute_file_content_hash
+
+            dataset_content_hash = try_compute_file_content_hash(dataset.path)
+
     return ExecutionSpec(
         dataset_id=str(ds_id),
         dataset_content_hash=dataset_content_hash,
@@ -118,4 +125,5 @@ def trial_execution_from_spec(
         group_column=spec.group_column,
         column_transforms=[dict(t) for t in spec.column_transforms],
         derived_features=[dict(d) for d in spec.derived_features],
+        dataset_content_hash=spec.dataset_content_hash,
     )

@@ -134,6 +134,12 @@ def fit_cli(args: argparse.Namespace) -> int:
         )
     print("  " + "-" * 60)
     print(f"\n  ✓ Best Model:   {result.best_model_id} ({result.metric}: {result.best_score:.4f})")
+    if hasattr(result.best_model, "provenance") and result.best_model.provenance:
+        prov = result.best_model.provenance
+        if prov.get("dataset_hash"):
+            print(f"  ✓ Content Hash: {prov['dataset_hash'][:16]}...")
+        if prov.get("seed") is not None:
+            print(f"  ✓ Random Seed:  {prov['seed']}")
     print(f"  ✓ Model Saved:  {output_path.resolve()}")
     print(f"  ✓ Run in Prod:  ModelArtifact.load(\"{output_path}\")")
     print("=" * 65)

@@ -32,13 +32,15 @@ Para exigir el backend nativo, registrar `LightGBMPlugin(use_fallback_if_missing
 
 ## Alcance de reproducibilidad
 
-Los trials registran parámetros y seed; los resultados y eventos se guardan en SQLite. En trials ordinarios los [experimentos OOF](features/oof-blending/spec.md) guardan backend, versiones de plugin/librerías, configuración y hashes de datos/artefactos en un informe enlazado al trial.
+Los trials registran parámetros, semilla aleatoria (`seed`), estrategia de validación, partición de cross-validation (número de folds, identificadores de fold `cv_fold_ids`, y hash SHA-256 de asignación de folds `cv_fold_assignment_hash`), hash SHA-256 del dataset (`dataset_content_hash`), hash SHA-256 de configuración (`config_hash`), clase y módulo concreto del estimador, backend (`native` o `fallback`), y versiones de librerías en SQLite. Toda esta información está disponible directamente en el leaderboard de `AutoMLWorkspace`, en el DataFrame `AutoMLResult.leaderboard()`, en las respuestas JSON de CLI y MCP, y en el bloque `provenance` de cada `ModelArtifact` exportado.
 
 Asimismo, la exportación de modelos mediante `ModelArtifact` (`workspace.export_model_artifact()`) persiste de forma automática un bloque `provenance` completo que documenta:
 - Versión de CATML y timestamp de creación UTC.
 - Versión de Python y versiones de dependencias del entorno (`numpy`, `pandas`, `scikit-learn`, `joblib`, `lightgbm`, `xgboost`, `catboost`, `optuna`).
-- Clase y módulo exacto del estimador final.
-- Hash SHA-256 del dataset de entrenamiento (`dataset_hash`) y semilla aleatoria (`seed`).
+- Clase y módulo exacto del estimador final (`estimator_class`, `estimator_module`).
+- Hash SHA-256 del dataset de entrenamiento (`dataset_hash`, `content_hash`) y hash de configuración (`config_hash`).
+- Semilla aleatoria (`seed`, `trial_seed`, `run_seed`).
+- Esquema de validación (`validation_strategy`, `cv_folds`, `cv_fold_ids`, `cv_fold_assignment_hash`).
 - Esquema de características y configuración de hiperparámetros consultables con `artifact.describe()`.
 
 Para una comparación reproducible, conservar el workspace, una copia o hash del dataset, configuración de validación, clase concreta del estimador y versiones del entorno. Los encoders de imagen también tienen modos distintos: el modo predeterminado es determinista y no acredita calidad equivalente a un encoder preentrenado.

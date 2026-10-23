@@ -1,5 +1,23 @@
 # Progress
 
+### Provenance & Reproducibility (P1) — Seeds, Fold IDs, Assignment Hashes & Content Fingerprints (2026-10-23)
+
+- **Domain (`content_hash.py`, `ports.py`, `execution_spec.py`)**:
+  - `compute_config_hash`: Deterministic SHA-256 fingerprint for model parameters, features, column transforms, derived features, and validation configuration.
+  - `compute_fold_assignment_hash`: Deterministic SHA-256 fingerprint for cross-validation fold partition assignments across any number of samples.
+  - `TrialExecution` and `ExecutionSpec`: Threaded `dataset_content_hash` throughout domain DTOs without breaking Hexagonal boundaries.
+- **Engine (`sklearn_trainer.py`)**:
+  - Enriched `artifacts` in every `TrialResult` with `seed`, `validation_strategy`, `cv_folds`, `cv_fold_ids` (`["fold_0", "fold_1", ...]`), `cv_fold_assignment_hash`, `dataset_content_hash`, `config_hash`, and `library_versions` (`collect_environment_dependencies`).
+  - Recorded exact fold partitions via `_cross_val_scores_with_callback(..., fold_assignment=...)` and holdout partitions.
+- **Application (`workspace.py`, `facade.py`, `inference_service.py`)**:
+  - `AutoMLWorkspace.leaderboard`: Exposes `seed`, `cv_folds`, `cv_fold_ids`, `cv_fold_assignment_hash`, `dataset_content_hash`, `config_hash`, and a structured `provenance` dictionary on each leaderboard trial row.
+  - `AutoMLResult.leaderboard()`: Populates pandas DataFrame with provenance columns (`seed`, `cv_folds`, `cv_fold_ids`, `dataset_content_hash`, `config_hash`, `backend`).
+  - `ModelArtifact.export_model_artifact`: Persists full provenance dictionary including seeds (`trial_seed`, `run_seed`), fold partition metadata, content hashes (`dataset_hash`, `content_hash`, `config_hash`), estimator class/module, and framework dependencies.
+  - CLI `catml fit`: Prints content hash and random seed of winning model.
+- **Tests**:
+  - New test suite [tests/test_provenance_and_reproducibility.py](file:///home/fenic/workspace/ai-ml/CATML/tests/test_provenance_and_reproducibility.py) (3/3 passing).
+  - 31/31 regression tests green across provenance, model artifacts, facade, doctor, and HPO fold pruning.
+
 ### Session Summary & State for Next Session (2026-10-23)
 
 - **Completed & Pushed to GitHub `origin/main`**:

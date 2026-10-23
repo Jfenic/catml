@@ -390,6 +390,11 @@ class InferenceService:
                         digest.update(block)
                 dataset_hash = digest.hexdigest()
 
+        arts = getattr(trial_result, "artifacts", {}) or {}
+        seed_val = getattr(target_trial, "seed", None) or getattr(getattr(run, "config", None), "random_seed", None)
+        strategy_val = getattr(experiment, "validation_strategy", None) or getattr(getattr(run, "config", None), "validation_strategy", None)
+        folds_val = arts.get("cv_folds") or getattr(getattr(run, "config", None), "cv_folds", None)
+
         provenance = {
             "catml_version": __version__,
             "created_at": datetime.now(timezone.utc).isoformat(),
@@ -400,7 +405,16 @@ class InferenceService:
             "dataset_id": dataset.id,
             "dataset_path": str(dataset.path) if hasattr(dataset, "path") else None,
             "dataset_hash": dataset_hash,
-            "seed": getattr(getattr(run, "config", None), "random_seed", None),
+            "content_hash": dataset_hash,
+            "config_hash": arts.get("config_hash"),
+            "seed": seed_val,
+            "trial_seed": getattr(target_trial, "seed", None),
+            "run_seed": getattr(getattr(run, "config", None), "random_seed", None),
+            "validation_strategy": strategy_val,
+            "cv_folds": folds_val,
+            "cv_fold_ids": arts.get("cv_fold_ids"),
+            "cv_fold_assignment_hash": arts.get("cv_fold_assignment_hash"),
+            "backend": arts.get("backend", "native"),
         }
 
         return ModelArtifact(

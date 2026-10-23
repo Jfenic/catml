@@ -28,6 +28,32 @@ def _compute_file_sha256(path: Path, chunk_size: int = 65536) -> str:
     return hasher.hexdigest()
 
 
+def collect_environment_dependencies() -> dict[str, str]:
+    """Collect installed package versions for ML framework reproducibility."""
+    from importlib.metadata import PackageNotFoundError, version
+
+    dep_versions: dict[str, str] = {}
+    for name in (
+        "numpy",
+        "pandas",
+        "scikit-learn",
+        "joblib",
+        "lightgbm",
+        "xgboost",
+        "catboost",
+        "optuna",
+        "torch",
+        "torchvision",
+        "timm",
+        "pillow",
+    ):
+        try:
+            dep_versions[name] = version(name)
+        except PackageNotFoundError:
+            pass
+    return dep_versions
+
+
 @dataclass
 class ModelArtifact:
     """
@@ -59,28 +85,8 @@ class ModelArtifact:
     def _collect_default_provenance(self) -> dict[str, Any]:
         import sys
         from datetime import datetime, timezone
-        from importlib.metadata import version, PackageNotFoundError
 
-        dep_versions: dict[str, str] = {}
-        for name in (
-            "numpy",
-            "pandas",
-            "scikit-learn",
-            "joblib",
-            "lightgbm",
-            "xgboost",
-            "catboost",
-            "optuna",
-            "torch",
-            "torchvision",
-            "timm",
-            "pillow",
-        ):
-            try:
-                dep_versions[name] = version(name)
-            except PackageNotFoundError:
-                pass
-
+        dep_versions = collect_environment_dependencies()
         estimator_step = self.pipeline[-1] if hasattr(self.pipeline, "__getitem__") and hasattr(self.pipeline, "steps") else self.pipeline
 
         return {

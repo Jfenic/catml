@@ -352,6 +352,7 @@ class AutoML:
         leaderboard_rows = []
         for rank, res in enumerate(valid_leaderboard, start=1):
             t_obj = ws.get_trial(res.trial_id)
+            arts = res.artifacts or {}
             leaderboard_rows.append({
                 "rank": rank,
                 "model_id": res.model_id,
@@ -359,6 +360,13 @@ class AutoML:
                 "metric": res.primary_metric,
                 "training_time_s": round(res.training_time_seconds, 3),
                 "cv_std": res.secondary_metrics.get("cv_std") if res.secondary_metrics else None,
+                "seed": arts.get("seed", getattr(t_obj, "seed", None)),
+                "validation_strategy": arts.get("validation_strategy"),
+                "cv_folds": arts.get("cv_folds"),
+                "cv_fold_ids": arts.get("cv_fold_ids"),
+                "dataset_content_hash": arts.get("dataset_content_hash"),
+                "config_hash": arts.get("config_hash"),
+                "backend": arts.get("backend", "native"),
                 "parameters": t_obj.parameters if t_obj else {},
             })
 

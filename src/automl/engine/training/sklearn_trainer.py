@@ -32,6 +32,12 @@ from automl.domain.runs.states import RunStatus
 from automl.domain.ports import TrialExecution, TrainerPort
 from automl.engine.profiling.dataset_profiler import load_dataframe
 from automl.plugins.models.sklearn_models import build_sklearn_model
+from automl.artifacts.model_artifact import collect_environment_dependencies
+from automl.domain.datasets.content_hash import (
+    compute_config_hash,
+    compute_fold_assignment_hash,
+    try_compute_file_content_hash,
+)
 
 
 class SklearnTrainer(TrainerPort):
@@ -182,6 +188,23 @@ class SklearnTrainer(TrainerPort):
                 default="holdout",
             )
 
+            dataset_content_hash = execution.dataset_content_hash or try_compute_file_content_hash(execution.dataset_path)
+            config_dict = {
+                "model_id": trial.model_id,
+                "parameters": trial.parameters or {},
+                "feature_names": sorted(execution.feature_names),
+                "target_column": execution.target_column,
+                "task_type": execution.task_type,
+                "metric": metric_name,
+                "validation_strategy": strategy,
+                "random_seed": execution.random_seed,
+                "trial_seed": getattr(trial, "seed", None),
+                "column_transforms": execution.column_transforms or [],
+                "derived_features": execution.derived_features or [],
+            }
+            config_hash = compute_config_hash(config_dict)
+            dep_versions = collect_environment_dependencies()
+
             if strategy in {
                 "cross_validation",
                 "kfold",
@@ -221,6 +244,7 @@ class SklearnTrainer(TrainerPort):
                 else:
                     cv_splitter = KFold(n_splits=n_splits, shuffle=True, random_state=execution.random_seed)
 
+                fold_assignment = np.full(len(X), -1, dtype=int)
                 scoring = _sklearn_scoring(metric_name, execution.task_type, self.plugin_registry)
                 fold_scores, pruned_at = _cross_val_scores_with_callback(
                     pipeline,
@@ -232,7 +256,12 @@ class SklearnTrainer(TrainerPort):
                     metric_name=metric_name,
                     plugin_registry=self.plugin_registry,
                     fold_callback=getattr(execution, "fold_callback", None),
+                    fold_assignment=fold_assignment,
                 )
+                cv_folds = len(fold_scores)
+                cv_fold_ids = [f"fold_{i}" for i in range(len(fold_scores))]
+                cv_fold_assignment_hash = compute_fold_assignment_hash(fold_assignment)
+
                 if pruned_at is not None:
                     elapsed = time.perf_counter() - started
                     trial.status = TrialStatus.FAILED
@@ -251,6 +280,16 @@ class SklearnTrainer(TrainerPort):
                         },
                         training_time_seconds=elapsed,
                         failure_reason="pruned",
+                        artifacts={
+                            "seed": getattr(trial, "seed", None) or execution.random_seed,
+                            "validation_strategy": strategy,
+                            "cv_folds": len(fold_scores),
+                            "cv_fold_ids": cv_fold_ids,
+                            "cv_fold_assignment_hash": cv_fold_assignment_hash,
+                            "dataset_content_hash": dataset_content_hash,
+                            "config_hash": config_hash,
+                            "library_versions": dep_versions,
+                        },
                     )
 
                 scores = np.asarray(fold_scores, dtype=float)
@@ -267,6 +306,8 @@ class SklearnTrainer(TrainerPort):
                     secondary["n_groups"] = len(set(groups))
                 pipeline.fit(X, y_adapted)
             else:
+                cv_folds = 1
+                cv_fold_ids = ["holdout_split"]
                 if execution.group_column and execution.group_column in df.columns:
                     from sklearn.model_selection import GroupShuffleSplit
                     gss = GroupShuffleSplit(n_splits=1, test_size=execution.test_size, random_state=execution.random_seed)
@@ -301,6 +342,12 @@ class SklearnTrainer(TrainerPort):
                             random_state=execution.random_seed,
                             stratify=None,
                         )
+
+                holdout_assignment = np.zeros(len(X), dtype=int)
+                if hasattr(X_test, "index"):
+                    holdout_assignment[X.index.isin(X_test.index)] = 1
+                cv_fold_assignment_hash = compute_fold_assignment_hash(holdout_assignment)
+
                 pipeline.fit(X_train, y_train)
                 predictions = pipeline.predict(X_test)
 
@@ -345,7 +392,18 @@ class SklearnTrainer(TrainerPort):
             trial.status = TrialStatus.COMPLETED
             artifacts = {
                 "estimator_class": type(model).__name__,
+                "estimator_module": type(model).__module__,
                 "backend": "fallback" if used_fallback else "native",
+                "backend_class": type(model).__name__,
+                "backend_module": type(model).__module__,
+                "seed": getattr(trial, "seed", None) or execution.random_seed,
+                "validation_strategy": strategy,
+                "cv_folds": cv_folds,
+                "cv_fold_ids": cv_fold_ids,
+                "cv_fold_assignment_hash": cv_fold_assignment_hash,
+                "dataset_content_hash": dataset_content_hash,
+                "config_hash": config_hash,
+                "library_versions": dep_versions,
             }
             if used_fallback and model_plugin is not None:
                 fb = getattr(model_plugin, "fallback_backend", None)
@@ -838,6 +896,7 @@ def _cross_val_scores_with_callback(
     metric_name: str,
     plugin_registry: Any,
     fold_callback: Any | None,
+    fold_assignment: Any | None = None,
 ) -> tuple[list[float], int | None]:
     """Run CV fold-by-fold so Optuna MedianPruner can receive intermediate scores.
 
@@ -857,6 +916,12 @@ def _cross_val_scores_with_callback(
     split_kwargs = {"groups": groups} if groups is not None else {}
     fold_scores: list[float] = []
     for fold_idx, (train_idx, test_idx) in enumerate(cv_splitter.split(X, y, **split_kwargs)):
+        if fold_assignment is not None:
+            try:
+                fold_assignment[test_idx] = fold_idx
+            except Exception:
+                pass
+
         X_train = X.iloc[train_idx] if hasattr(X, "iloc") else X[train_idx]
         X_test = X.iloc[test_idx] if hasattr(X, "iloc") else X[test_idx]
         y_train = y.iloc[train_idx] if hasattr(y, "iloc") else y[train_idx]
