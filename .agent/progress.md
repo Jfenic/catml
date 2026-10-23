@@ -1,5 +1,24 @@
 # Progress
 
+### Facade Slim & Quality Debt (P1) — Workspace Decomposition, Gradual Mypy, Zero ESLint Warnings & Feature Selection Benchmark (2026-10-23)
+
+- **Application (`workspace.py`, `dataset_service.py`, `run_service.py`, `experiment_service.py`, `experiment_planning_service.py`, `ensemble_service.py`)**:
+  - **Facade Slimming**: Decomposed `AutoMLWorkspace` God-object (~1800 lines -> 693 lines, over 1100 lines extracted) into cohesive application services:
+    - `DatasetService`: Encapsulates dataset registration, profile persistence, task planning (`plan_from_dataframe`), questionnaire generation/advising, and meta-knowledge synthesis.
+    - `RunService`: Encapsulates AutoML run lifecycle, time budget deadlines and enforcement, model inclusion/exclusion scoping, pause/resume/cancel/clone operations.
+    - `ExperimentService`: Encapsulates experiment validation (anti-leakage checks, preparation/feature set lineage, PCA sanity), model task validation, trial persistence, and cryptographic leaderboard queries.
+    - `ExperimentPlanningService`: Encapsulates candidate queues, heuristic scoring, scheduling (`select_next`), and batch queue execution with budget policy.
+    - `EnsembleService`: Encapsulates multi-model voting and out-of-fold blending with regression & classification task adaptation.
+  - **Zero Breaking Changes**: Preserved 100% of public methods, properties, and signatures on `AutoMLWorkspace` as delegating methods for full backward compatibility across CLI, CQRS command/query buses, and Web UI.
+- **Quality Debt & Typing**:
+  - **Gradual Mypy**: Configured `pyproject.toml` and CI `.github/workflows/ci.yml` to run mypy on `src/automl/domain` and `src/automl/application` with gradual un-ignoring of clean subpackages (`bus`, `commands`, `queries`, `registries`, `bootstrap`). Fixed TypeVar return types on `CommandBus.dispatch` and `QueryBus.dispatch`. 126/126 source files clean.
+  - **Ruff Cleanup**: Resolved all ruff errors across domain and application (redundant list wrapping in sorted, fold assignment hash ternary operator, unused imports).
+  - **ESLint Zero Warnings**: Cleaned up all 39 `no-unused-vars` ESLint warnings across Workbench static JS files (`compare.js`, `correlations_view.js`, `data_quality_panel.js`, `dataset_columns.js`, `dataset_summary.js`, `datasets_view.js`, `derived_features.js`, `feature_selector.js`, `questionnaire.js`, `explore.js`, `jobs.js`, `knowledge.js`, `new_experiment.js`, `studio.js`, `switch_dataset_modal.js`). `npm run lint:js` now exits with 0 errors and 0 warnings.
+  - **Benchmark Scenario `feature_selection_v05`**: Implemented `feature_selection_v05` scenario in `src/automl/benchmarks/runner.py` showcasing feature discovery and supervised mutual information / tree importance ranking with candidate promotion, verified via `tests/test_benchmark.py`.
+- **Tests**:
+  - New test suite `tests/test_clean_arch_facade_slim.py` verifying lazy application services, identity caching, workspace delegation, and full lifecycle execution.
+
+
 ### Provenance & Reproducibility (P1) — Seeds, Fold IDs, Assignment Hashes & Content Fingerprints (2026-10-23)
 
 - **Domain (`content_hash.py`, `ports.py`, `execution_spec.py`)**:

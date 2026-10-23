@@ -3,7 +3,7 @@ import { store } from "../../store.js";
 import { bus } from "../../bus.js";
 import { api } from "../../api.js";
 import { icon } from "../../icons.js";
-import { escapeHtml, isRunActive } from "../../utils.js";
+import { escapeHtml } from "../../utils.js";
 
 export function _renderOptionCard(view, field, val, currentVal, title, desc, tag = "") {
   const isSelected = currentVal === val;

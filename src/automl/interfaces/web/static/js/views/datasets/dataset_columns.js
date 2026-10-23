@@ -1,9 +1,4 @@
-/** Extracted from DatasetsView — dataset_columns.js (Clean Architecture PR3). */
-import { store } from "../../store.js";
-import { bus } from "../../bus.js";
-import { api } from "../../api.js";
 import { icon } from "../../icons.js";
-import { escapeHtml, isRunActive } from "../../utils.js";
 
 export function _renderColumnasTab(view, p, featureCols, numCols, catCols) {
   const imgCols = (p.columns || []).filter(c => c.is_image && c.name !== p.target_column).length;

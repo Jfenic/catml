@@ -116,6 +116,12 @@ class BenchmarkRunner:
                 setup=self._setup_optuna_v04,
                 executor=self._execute_optuna_v04,
             ),
+            BenchmarkScenario(
+                id="feature_selection_v05",
+                version="0.5",
+                description="Feature Discovery & Selection (mutual information & tree ranking) — V0.5",
+                setup=self._setup_feature_selection_v05,
+            ),
         ]
 
 
@@ -246,6 +252,33 @@ class BenchmarkRunner:
             )
         )
         return ws.repository.list_trial_results(experiment_id)
+
+    def _setup_feature_selection_v05(self, ws, cmd, qry):
+        dataset, run = self._register_base(ws)
+        cmd.dispatch(ExcludeFeatureCommand(dataset.id, "customer_id", run_id=run.id))
+        candidates = ws.select_features(run.id)
+        top_cand = candidates[0] if candidates else None
+        if top_cand:
+            promoted = ws.promote_candidate_feature_set(
+                run_id=run.id,
+                candidate_id=top_cand.id,
+                new_name="v05_selected_features",
+                allow_unverified_promotion=True,
+            )
+            feature_names = promoted.feature_names
+            feature_set_id = promoted.id
+        else:
+            feature_names = ["salary", "debt", "account_balance", "tenure", "age"]
+            feature_set_id = None
+        exp = ws.create_experiment(
+            run=run,
+            name="feature_selection_v05",
+            feature_names=feature_names,
+            feature_set_id=feature_set_id,
+            model_ids=["logistic_regression", "random_forest"],
+            priority="high",
+        )
+        return run.id, exp.id
 
     def run_all(self, scenario_filter: str | None = None) -> list[dict]:
         import time

@@ -459,7 +459,6 @@ export class StudioView {
   }
 
   _renderTabContent() {
-    const activeRun = this.activeRun;
     if (this.activeTab === "models") {
       return this._renderLeaderboardTabHtml();
     } else if (this.activeTab === "hpo") {

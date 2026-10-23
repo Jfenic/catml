@@ -1,9 +1,5 @@
-/** Extracted from DatasetsView — correlations_view.js (Clean Architecture PR3). */
-import { store } from "../../store.js";
-import { bus } from "../../bus.js";
-import { api } from "../../api.js";
 import { icon } from "../../icons.js";
-import { escapeHtml, isRunActive } from "../../utils.js";
+import { escapeHtml } from "../../utils.js";
 
 export function _renderCorrelationTab(view, p) {
   const cm = p.correlation_matrix;

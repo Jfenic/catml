@@ -1,9 +1,5 @@
-/** Extracted from DatasetsView — data_quality_panel.js (Clean Architecture PR3). */
-import { store } from "../../store.js";
-import { bus } from "../../bus.js";
-import { api } from "../../api.js";
 import { icon } from "../../icons.js";
-import { escapeHtml, isRunActive } from "../../utils.js";
+import { escapeHtml } from "../../utils.js";
 
 export function _renderHealthCard(view, p) {
   const hasLeakage = Boolean(p.has_leakage || (p.leakage_columns && p.leakage_columns.length > 0));

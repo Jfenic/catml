@@ -1,9 +1,5 @@
-/** Extracted from DatasetsView — dataset_summary.js (Clean Architecture PR3). */
-import { store } from "../../store.js";
-import { bus } from "../../bus.js";
-import { api } from "../../api.js";
 import { icon } from "../../icons.js";
-import { escapeHtml, isRunActive } from "../../utils.js";
+import { escapeHtml } from "../../utils.js";
 
 export function _renderResumenTab(view, p, featureCols, numCols, catCols, excludedCount, recommendations) {
   return `

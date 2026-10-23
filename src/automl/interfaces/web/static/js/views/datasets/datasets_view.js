@@ -6,7 +6,7 @@ import { store } from "../../store.js";
 import { bus } from "../../bus.js";
 import { api } from "../../api.js";
 import { icon } from "../../icons.js";
-import { escapeHtml, isRunActive } from "../../utils.js";
+import { escapeHtml } from "../../utils.js";
 
 import { _renderHealthCard } from "./data_quality_panel.js";
 import { _renderResumenTab } from "./dataset_summary.js";
@@ -104,7 +104,6 @@ export class DatasetsView {
 
   async fetchData() {
     try {
-      const state = store.getState();
       this.datasets = await api.getDatasets().catch(() => []);
 
       this.activeDatasetId = store.getActiveDatasetId()
@@ -159,7 +158,6 @@ export class DatasetsView {
     const columns = p.columns || [];
     const featureCols = columns.filter(c => c.name !== p.target_column);
     const numCols = columns.filter(c => c.dtype && (c.dtype.includes("int") || c.dtype.includes("float")) && c.name !== p.target_column).length;
-    const imgCols = columns.filter(c => c.is_image && c.name !== p.target_column).length;
     const catCols = columns.filter(c => c.dtype && (c.dtype === "object" || c.dtype === "category" || c.dtype === "string") && !c.is_image && c.name !== p.target_column).length;
     const excludedCount = columns.filter(c => c.is_identifier || c.catml_action === "Exclude").length;
     const currentDs = this.datasets.find(d => d.id === this.activeDatasetId);

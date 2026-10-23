@@ -1,9 +1,4 @@
-/** Extracted from DatasetsView — feature_selector.js (Clean Architecture PR3). */
 import { store } from "../../store.js";
-import { bus } from "../../bus.js";
-import { api } from "../../api.js";
-import { icon } from "../../icons.js";
-import { escapeHtml, isRunActive } from "../../utils.js";
 
 export function _getFilteredColumns(view, columns) {
   return columns.filter(c => {

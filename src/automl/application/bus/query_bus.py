@@ -18,7 +18,7 @@ class QueryBus:
     def register(self, query_type: type[TQuery], handler: Callable[[TQuery], TResult]) -> None:
         self._handlers[query_type] = handler
 
-    def dispatch(self, query: TQuery) -> TResult:
+    def dispatch(self, query: Any) -> Any:
         handler = self._handlers.get(type(query))
         if handler is None:
             raise KeyError(f"No handler registered for {type(query).__name__}")

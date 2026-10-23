@@ -125,7 +125,7 @@ export class SwitchDatasetModal {
     this.container.querySelector("#btnSwitchModalCancel")?.addEventListener("click", close);
 
     this.container.querySelectorAll(".ds-item-card, .btn-select-ds").forEach(el => {
-      el.addEventListener("click", (e) => {
+      el.addEventListener("click", () => {
         const id = el.getAttribute("data-dataset-id");
         if (id) {
           store.setActiveDataset(id);

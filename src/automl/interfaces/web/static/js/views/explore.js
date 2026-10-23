@@ -14,7 +14,6 @@
  * - Technical Markdown / JSON Report Export.
  */
 import { store } from "../store.js";
-import { bus } from "../bus.js";
 import { api } from "../api.js";
 import { icon } from "../icons.js";
 import { escapeHtml, getTransformationStageInfo, formatPValue } from "../utils.js";
@@ -690,11 +689,12 @@ export class ExploreView {
           <span class="text-[#F59E0B] font-semibold">${data.outliers_count || 0} outliers detectados</span>
         </div>
 
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 text-xs font-mono text-[#8B95A7]">
+        <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-2 text-xs font-mono text-[#8B95A7]">
           <div class="bg-[#11151E] p-2 rounded border border-[#242A36]">Bigote Inf: <strong class="text-[#F7F8FA]">${wLow}</strong></div>
           <div class="bg-[#11151E] p-2 rounded border border-[#242A36]">Q1 (25%): <strong class="text-[#F7F8FA]">${q25}</strong></div>
           <div class="bg-[#11151E] p-2 rounded border border-[#242A36]">Mediana: <strong class="text-[#53C8FF]">${med}</strong></div>
           <div class="bg-[#11151E] p-2 rounded border border-[#242A36]">Q3 (75%): <strong class="text-[#F7F8FA]">${q75}</strong></div>
+          <div class="bg-[#11151E] p-2 rounded border border-[#242A36]">Bigote Sup: <strong class="text-[#F7F8FA]">${wHigh}</strong></div>
         </div>
       </div>
     `;

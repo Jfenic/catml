@@ -8,7 +8,6 @@ import { api } from "../api.js";
 import { icon } from "../icons.js";
 import {
   isRunActive,
-  isMinimizingMetric,
   getMetricDirectionInfo,
   formatMetricComparison,
   formatExperimentStatus,

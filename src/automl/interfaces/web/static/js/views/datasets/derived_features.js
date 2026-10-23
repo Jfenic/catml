@@ -1,9 +1,5 @@
-/** Extracted from DatasetsView — derived_features.js (Clean Architecture PR3). */
-import { store } from "../../store.js";
-import { bus } from "../../bus.js";
 import { api } from "../../api.js";
 import { icon } from "../../icons.js";
-import { escapeHtml, isRunActive } from "../../utils.js";
 
 export function _renderCalculatorTab(view, p) {
   const columns = p.columns || [];

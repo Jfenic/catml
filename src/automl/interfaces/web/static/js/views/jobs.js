@@ -287,7 +287,7 @@ export class JobsPanel {
     return this.recentJobs.map(job => this._renderJobCard(job, false)).join("");
   }
 
-  _renderJobCard(job, isActive) {
+  _renderJobCard(job, _isActive) {
     const isCompleted = job.status === "completed";
     const isFailed = job.status === "failed";
     const isCancelled = job.status === "cancelled" || job.status === "interrupted";
@@ -350,7 +350,7 @@ export class JobsPanel {
 
   _bindActionButtons() {
     this.panel.querySelectorAll(".btn-job-action").forEach(button => {
-      button.addEventListener("click", async (e) => {
+      button.addEventListener("click", async () => {
         const jobId = button.getAttribute("data-job-id");
         const action = button.getAttribute("data-action");
         if (!jobId || !action) return;

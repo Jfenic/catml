@@ -40,10 +40,7 @@ def compute_config_hash(config_dict: dict[str, Any]) -> str:
 
 def compute_fold_assignment_hash(assignments: Any) -> str:
     """Return lowercase hex SHA-256 fingerprint for cross-validation fold partition assignments."""
-    if hasattr(assignments, "tolist"):
-        items = assignments.tolist()
-    else:
-        items = list(assignments)
+    items = assignments.tolist() if hasattr(assignments, "tolist") else list(assignments)
     raw = json.dumps([int(x) for x in items])
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 

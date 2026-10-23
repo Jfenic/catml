@@ -208,7 +208,7 @@ class PreparationService:
         plan.touch()
         self.store.save_plan(plan)
 
-        touched_cols = sorted(list({str(c) for step in plan.steps for c in step.columns if c}))
+        touched_cols = sorted({str(c) for step in plan.steps for c in step.columns if c})
         rows_touched = abs(after["rows"] - before["rows"])
 
         return {

@@ -3,7 +3,6 @@
  * Provides Auto, Guided, and Manual operating strategies with Compute Budget selection.
  */
 import { store } from "../store.js";
-import { bus } from "../bus.js";
 import { api } from "../api.js";
 import { icon } from "../icons.js";
 import { escapeHtml, isRunActive } from "../utils.js";

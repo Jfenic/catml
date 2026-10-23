@@ -169,3 +169,13 @@ strict_optional = true
 module = "automl.application.*"
 # Gradual: application typed incrementally after domain is green.
 ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = [
+    "automl.application.bus.*",
+    "automl.application.commands.*",
+    "automl.application.queries.*",
+    "automl.application.registries.*",
+    "automl.application.bootstrap",
+]
+ignore_errors = false
