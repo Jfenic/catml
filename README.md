@@ -12,6 +12,10 @@
 [![Architecture](https://img.shields.io/badge/Architecture-Hexagonal%20%2B%20CQRS-orange.svg)](ARCHITECTURE.md)
 [![MCP](https://img.shields.io/badge/MCP-Ready-purple.svg)](src/automl/interfaces/mcp/)
 
+<p align="center">
+  <img src="docs/assets/catml-demo.gif" alt="CATML Terminal CLI in Action" width="100%" />
+</p>
+
 ---
 
 ## Why CATML?
@@ -25,6 +29,16 @@ CATML is engineered from the ground up with **five distinct advantages**:
 3. **3-Line Ergonomics & Reproducibility:** Simple, scikit-learn compatible facade (`AutoML(random_state=42).fit(df, target="churn")`) over the same CQRS/hexagonal stages used by CLI and agents—not a separate monolithic engine.
 4. **Portable Artifacts (Database-Free Inference Runtime):** Winning models serialize into `model.pkl` + `.sha256` sidecars for workspace-independent inference. Runtime still needs compatible scientific Python stacks (see security note below)—not a zero-dependency binary.
 5. **Local-First by Default:** Workbench and MCP bind to `127.0.0.1` by default, confine filesystem access to the workspace, and keep an SQLite ledger locally. CATML does not phone home or upload dataset rows. Optional extras (vision weight downloads, remote LLM endpoints) may use the network when you enable them. Workbench UI chrome (Tailwind, Chart.js, Lucide, fonts) is vendored offline in the wheel.
+
+### Feature Comparison
+
+| Capability | Traditional AutoML (AutoGluon, FLAML, PyCaret) | Ad-hoc ML Scripts | CATML |
+|---|---|---|---|
+| **Data Leakage Guardian** | Manual / Absent (unnoticed test contamination) | High risk of subtle target/group leakage | **Automatic Anti-Leakage Guardian** halts on target/group leakage & pseudo-IDs |
+| **AI Agent Governance** | None / Monolithic black boxes | Fragile prompts without cost controls | **Native MCP dual transport** (stdio/HTTP) with token audits & budget leases |
+| **Clean Architecture** | Monolithic framework-bound pipelines | Hard-to-maintain spaghetti scripts | **Hexagonal + CQRS Bus** with pure Python domain core |
+| **Inference Artifacts** | Heavy pickled environments tied to DB/cloud | Ad-hoc `.pkl` without integrity checksums | **Portable artifacts** (`model.pkl` + `.sha256`) independent of training workspace |
+| **Privacy & Telemetry** | Cloud lock-in / Telemetry phone-home | Variable | **100% Local-First** (`127.0.0.1`, local SQLite, 0 dataset egress) |
 
 ---
 
@@ -103,6 +117,10 @@ Example output (illustrative scores; `lightgbm` requires the optional `catml[mod
 ---
 
 ## Interactive Web Workbench (Visual ML Lab)
+
+<p align="center">
+  <img src="website/public/workbench.png" alt="CATML Interactive Web Workbench & Dataset Inspector" width="100%" />
+</p>
 
 CATML includes a built-in interactive Tech Minimalista Premium visual dashboard for monitoring runs, inspecting datasets, and managing experiments:
 
@@ -199,6 +217,45 @@ pip install "catml[all]"
 ---
 
 ## Advanced Architecture (CQRS Application Bus)
+
+CATML enforces a strict Hexagonal (Ports & Adapters) architecture with CQRS separation between mutation commands and inspection queries:
+
+```mermaid
+flowchart TD
+    subgraph S1["01 · Dataset & Inspection"]
+        D["Tabular CSV / Parquet"]
+        LG["Anti-Leakage Guardian<br/>(Target, Group & Pseudo-ID Checks)"]
+        FD["Feature Discovery<br/>(Categorical, Temporal, TF-IDF Text)"]
+    end
+
+    subgraph S2["02 · CQRS Application Core"]
+        BUS["CommandBus & QueryBus<br/>(Pure Hexagonal Orchestration)"]
+        HPO["HPO & Model Ensembles<br/>(LightGBM, XGBoost, CatBoost, Stacking)"]
+    end
+
+    subgraph S3["03 · Control & Interfaces"]
+        FAC["Python API (3 Lines)<br/>AutoML.fit()"]
+        CLI["Modular CLI<br/>catml fit / data / recipe"]
+        MCP["Native MCP Server<br/>(Claude Desktop, Cursor, Agents)"]
+        WB["Local Web Workbench<br/>(Visual Lab at 127.0.0.1)"]
+    end
+
+    subgraph S4["04 · Verified Artifacts"]
+        ART["Portable Model Artifact<br/>model.pkl + .sha256"]
+        REC["Reproducible Experiment Recipe<br/>YAML Specification"]
+    end
+
+    D --> LG
+    LG --> FD
+    FD --> BUS
+    BUS --> HPO
+    FAC -.-> BUS
+    CLI -.-> BUS
+    MCP -.-> BUS
+    WB -.-> BUS
+    HPO --> ART
+    HPO --> REC
+```
 
 For power users, MLOps pipelines, and custom orchestrators, CATML provides strict CQRS separation via `CommandBus` and `QueryBus`:
 
