@@ -149,9 +149,37 @@ def generate_oof_submission(workspace, command) -> str:
     )
     started = monotonic()
     try:
+        holdout_dataset_path = getattr(command, "holdout_dataset_path", None)
+        holdout_ratio = float(getattr(command, "holdout_ratio", 0.0) or 0.0)
+        min_improvement = float(getattr(command, "min_improvement", 0.0) or 0.0)
+
+        X_train_eval = X
+        y_train_eval = train_df[dataset.target_column]
+        X_holdout = None
+        y_holdout = None
+        holdout_hash = None
+
+        if holdout_dataset_path:
+            holdout_hash = file_hash(holdout_dataset_path)
+            holdout_df = load_dataframe(holdout_dataset_path)
+            X_holdout = holdout_df[features]
+            y_holdout = holdout_df[dataset.target_column]
+        elif holdout_ratio > 0.0:
+            if holdout_ratio >= 0.5 or holdout_ratio <= 0.0:
+                raise ValueError("holdout_ratio must be strictly between 0.0 and 0.5")
+            from sklearn.model_selection import train_test_split
+            stratify_col = train_df[dataset.target_column] if dataset.task_type == "binary_classification" else None
+            X_train_eval, X_holdout, y_train_eval, y_holdout = train_test_split(
+                X,
+                train_df[dataset.target_column],
+                test_size=holdout_ratio,
+                random_state=run.config.random_seed,
+                stratify=stratify_col,
+            )
+
         result = evaluate_oof(
-            X,
-            train_df[dataset.target_column],
+            X_train_eval,
+            y_train_eval,
             X_test,
             {m: factory(m) for m in models},
             folds=command.folds,
@@ -161,6 +189,8 @@ def generate_oof_submission(workspace, command) -> str:
             max_seconds=command.max_seconds,
             check_allowed=check_allowed,
             progress=workspace.execution_progress,
+            X_holdout=X_holdout,
+            y_holdout=y_holdout,
         )
         if file_hash(dataset.path) != train_hash or file_hash(command.test_dataset_path) != test_hash:
             raise ValueError("Dataset changed during OOF evaluation; discard this run and retry")
@@ -168,7 +198,7 @@ def generate_oof_submission(workspace, command) -> str:
         artifact_dir = workspace.root_dir.resolve() / "oof" / experiment.id
         artifact_dir.mkdir(parents=True, exist_ok=True)
         oof_path, test_path, report_path = (artifact_dir / name for name in ("oof.csv", "test_predictions.csv", "report.json"))
-        pd.DataFrame({"source_row": range(len(X)), "fold": result.fold_ids,
+        pd.DataFrame({"source_row": range(len(X_train_eval)), "fold": result.fold_ids,
                       "target": result.target, **result.oof, "oof_blend": result.blended_oof}).to_csv(oof_path, index=False)
         pd.DataFrame({"source_row": range(len(X_test)), **result.test, "oof_blend": result.blended_test}).to_csv(test_path, index=False)
         predictions = result.blended_test.tolist() if command.predict_proba else np.asarray(result.classes)[(result.blended_test >= 0.5).astype(int)].tolist()
@@ -185,6 +215,16 @@ def generate_oof_submission(workspace, command) -> str:
         if result.weights is not None:
             trial.parameters["weights"] = [float(result.weights.get(m, 0.0)) for m in models]
 
+        is_promoted = False
+        evaluation_msg = f"{result.method} OOF comparison; not independent holdout evidence"
+        if result.holdout_scores is not None and result.holdout_delta is not None:
+            if result.holdout_delta > min_improvement:
+                is_promoted = True
+                evaluation_msg = f"{result.method} OOF blend verified on independent holdout; promoted candidate (delta: {result.holdout_delta:+.4f})"
+            else:
+                is_promoted = False
+                evaluation_msg = f"{result.method} OOF holdout delta {result.holdout_delta:+.4f} did not exceed threshold {min_improvement:.4f}; not promoted"
+
         report = {**submission, "run_id": run.id, "experiment_id": experiment.id,
                   "source_experiment_id": source.id, "folds": command.folds,
                   "seed": run.config.random_seed, "models": models, "method": result.method,
@@ -197,11 +237,16 @@ def generate_oof_submission(workspace, command) -> str:
                   "classes": result.classes, "features": features,
                   "positive_class": result.classes[1],
                   "backends": result.backends, "parameters": result.parameters, "versions": versions,
-                  "train_hash": train_hash, "test_hash": test_hash,
+                  "train_hash": train_hash, "test_hash": test_hash, "holdout_hash": holdout_hash,
+                  "holdout_scores": result.holdout_scores,
+                  "holdout_score": result.holdout_scores["oof_blend"] if result.holdout_scores else None,
+                  "holdout_baseline_score": result.holdout_scores[models[0]] if result.holdout_scores else None,
+                  "holdout_delta": result.holdout_delta,
+                  "stacking_residuals": result.stacking_residuals,
                   "max_seconds": command.max_seconds, "training_seconds": result.training_seconds,
                   "oof_predictions_path": str(oof_path), "test_predictions_path": str(test_path),
                   "oof_predictions_hash": file_hash(oof_path), "test_predictions_hash": file_hash(test_path),
-                  "promoted": False, "evaluation": f"{result.method} OOF comparison; not independent holdout evidence"}
+                  "promoted": is_promoted, "evaluation": evaluation_msg}
         report["plugin_versions"] = {m: workspace.plugin_registry.get_model_plugin(m).version
                                      for m in models if workspace.plugin_registry.get_model_plugin(m)}
         config = {key: report[key] for key in ("models", "folds", "seed", "features", "parameters", "weights", "method")}
@@ -218,12 +263,28 @@ def generate_oof_submission(workspace, command) -> str:
         workspace.repository.save_trial_result(TrialResult(
             trial_id=trial.id, experiment_id=experiment.id, model_id=trial.model_id,
             primary_metric="roc_auc", primary_score=report["score"],
-            secondary_metrics={"cv_std": report["cv_std"], "baseline_score": report["baseline_score"], "delta": report["delta"]},
+            secondary_metrics={
+                "cv_std": report["cv_std"],
+                "baseline_score": report["baseline_score"],
+                "delta": report["delta"],
+                "holdout_score": report["holdout_score"],
+                "holdout_delta": report["holdout_delta"],
+            },
             training_time_seconds=result.training_seconds,
             artifacts={"report": str(report_path), "oof": str(oof_path), "test": str(test_path)},
         ))
         experiment.transition_to(ExperimentStatus.COMPLETED)
-        workspace._emit("OOFCompleted", {"experiment_id": experiment.id, "score": report["score"], "delta": report["delta"], "promoted": False}, run_id=run.id)
+        workspace._emit(
+            "OOFCompleted",
+            {
+                "experiment_id": experiment.id,
+                "score": report["score"],
+                "delta": report["delta"],
+                "promoted": is_promoted,
+                "holdout_delta": result.holdout_delta,
+            },
+            run_id=run.id,
+        )
     except Exception as exc:
         trial.status = TrialStatus.FAILED
         experiment.transition_to(ExperimentStatus.FAILED)

@@ -1,5 +1,23 @@
 # Progress
 
+### Honesty & Leakage Residual (P0) — OOF Holdout Validation, Stacking Residuals & Optional Strict Audit (2026-10-23)
+
+- **Engine (`oof.py`)**:
+  - `evaluate_oof`: Added `X_holdout` and `y_holdout` support to evaluate blend candidates on independent validation sets without data leakage.
+  - Multi-method holdout projection (`average`, `rank`, `simplex`, `stacked`) and calculation of `holdout_scores` and `holdout_delta` against the declared baseline model.
+  - `stacking_residuals`: Computed mean, std, and Brier score residuals on both OOF blended predictions and holdout predictions.
+- **Application (`oof_submission.py`, `workspace_commands.py`)**:
+  - `GenerateOOFSubmissionCommand`: Extended with `holdout_dataset_path`, `holdout_ratio`, and `min_improvement`.
+  - Honest Candidate Promotion Gate: Candidates are only marked `promoted=True` if an independent holdout evaluation demonstrates improvement (`holdout_delta > min_improvement`). Unverified blends remain `promoted=False`.
+- **CLI (`main.py`)**:
+  - `predict`: Added `--holdout-dataset`, `--holdout-ratio`, and `--min-improvement`.
+  - Output printing enriched with holdout score, candidate promotion status, and stacking residuals.
+- **CI (`ci.yml`)**:
+  - Configured optional strict hard-fail on `pip-audit` via `CATML_AUDIT_STRICT=true`.
+- **Tests**:
+  - New dedicated test suite `tests/test_oof_holdout_and_residuals.py` (3/3 passing).
+  - All 35 OOF blending and holdout tests green.
+
 ### Data Preparation P2 — CLI, facade prepare, fold-safe pipeline bridging & recipe parity (2026-10-14)
 
 - **Domain**: `pipeline_steps_to_column_transforms` in `domain/preparation/pipeline_bridge.py` mapping pipeline-scoped steps (`MARK_IMPUTE`, `MARK_SCALE`) into trainer column transforms.

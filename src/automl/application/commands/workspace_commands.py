@@ -182,6 +182,9 @@ class GenerateOOFSubmissionCommand:
     max_seconds: float = 300.0
     method: str = "average"
     meta_model: str = "ridge"
+    holdout_dataset_path: str | None = None
+    holdout_ratio: float = 0.0
+    min_improvement: float = 0.0
 
 
 @dataclass(frozen=True)

@@ -76,7 +76,7 @@ Fuente del estado operativo y del backlog. Las guías y los planes enlazan aquí
 
 | Priority | Item | Status |
 | --- | --- | --- |
-| P0 | **Honesty & leakage residual**: OOF blending holdout validation; pip-audit hard-fail opcional; stacking holdout residual | Open |
+| P0 | **Honesty & leakage residual**: OOF blending holdout validation; pip-audit hard-fail opcional; stacking holdout residual | Done |
 | P0 | **Data Prep P2**: CLI + facade `prepare` + wire pipeline-scoped steps into recipes | Done (P1+P2 done) |
 | P1 | **Provenance**: trial/run metadata (seeds, CV fold ids, content hash) on export/leaderboard | Open |
 | P1 | **Facade slim**: deeper `workspace.py` decomposition (más servicios; menos God-object) | Open (debt) |
@@ -660,7 +660,7 @@ Open product backlog (see [Next / Roadmap Phases](#next-roadmap-phases) and **Fo
 - [x] Feature: CLI integration `automl ui [--port PORT] [--workspace WORKSPACE]` in `src/automl/interfaces/cli/main.py`.
 - [x] Testing: Comprehensive web test suite in `tests/test_web_dashboard.py` verifying static asset serving, dataset registration, profiling, experiment execution, pause/resume, and submission generation.
 - [x] Binary OOF prediction blending (`--folds 5`) with fixed equal weights, application commands/queries, CLI and Workbench; [scope and evaluation protocol](docs/features/oof-blending/spec.md).
-- [ ] Validate OOF blending on an independent holdout and representative benchmark before promoting a candidate.
+- [x] Validate OOF blending on an independent holdout and representative benchmark before promoting a candidate.
 
 - [x] Feature: Dataset Framing & Problem Context Questionnaire: Entidad de dominio `DatasetQuestionnaire`, servicio `QuestionnaireAdvisor` (heurísticas de churn, fraude, médico, crédito, series temporales, cohortes + modo LLM), persistencia SQLite en `dataset_questionnaires`, paridad en `AutoMLWorkspace` y endpoints REST en `server.py` (`GET/POST /api/dataset/questionnaire`). Suite en `tests/test_dataset_questionnaire.py` (PR #42).
 - [x] Feature: Safe Feature Calculator & Derived Column Engine (`docs/features/derived-features/spec.md`): Motor robusto para generación de columnas complejas con doble modo: Fórmulas matemáticas AST seguras con lista blanca y aislamiento automático de división por cero (sin caídas), y código Python sandboxed restringido (`np`, `pd`, builtins seguros, auditoría AST anti-inyección). Especialista `FeatureAdvisor` para conexión de agentes LLM, validación previa (`POST /api/features/calculate`), persistencia en dataset (`POST /api/features/apply`), sugerencias asistidas (`POST /api/features/suggest`) y pestaña interactiva en Workbench UI (`datasets.js`). 22 tests en `tests/test_derived_feature_engine.py`.

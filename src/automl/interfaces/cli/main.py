@@ -636,6 +636,9 @@ def predict_cli(args: argparse.Namespace) -> int:
                 method=getattr(args, "method", "average") or "average",
                 meta_model=getattr(args, "meta_model", "ridge") or "ridge",
                 max_seconds=args.oof_timeout,
+                holdout_dataset_path=getattr(args, "holdout_dataset", None),
+                holdout_ratio=getattr(args, "holdout_ratio", 0.0) or 0.0,
+                min_improvement=getattr(args, "min_improvement", 0.0) or 0.0,
             ))
             res = qry.dispatch(GetOOFResultQuery(run_id=run_id, experiment_id=experiment_id))
         except (ValueError, KeyError, RuntimeError, TimeoutError) as exc:
@@ -671,6 +674,12 @@ def predict_cli(args: argparse.Namespace) -> int:
         print(f"  OOF folds:     {res['folds']}")
         print(f"  OOF method:    {res.get('method', 'average')}")
         print(f"  ROC-AUC:       {res['score']:.6f} (baseline {res['baseline_score']:.6f}; delta {res['delta']:+.6f})")
+        if res.get("holdout_score") is not None:
+            print(f"  Holdout score: {res['holdout_score']:.6f} (baseline {res['holdout_baseline_score']:.6f}; delta {res['holdout_delta']:+.6f})")
+            print(f"  Candidate:     {'✓ PROMOTED to production' if res.get('promoted') else 'NOT PROMOTED (holdout delta <= threshold)'}")
+        if res.get("stacking_residuals"):
+            st = res["stacking_residuals"]
+            print(f"  Stacking res:  mean={st['mean_residual']:+.4f}, std={st['std_residual']:.4f}, brier={st['brier_score']:.4f}")
     if res.get("template_used"):
         print(f"  Template:      {res['template_used']}\n")
     else:
@@ -884,6 +893,9 @@ def main(argv: list[str] | None = None) -> int:
     pred_parser.add_argument("--method", choices=["average", "rank", "simplex", "stacked"], default="average", help="Blending method for OOF (default: average)")
     pred_parser.add_argument("--meta-model", choices=["ridge", "logistic_regression", "lasso"], default="ridge", help="Meta-estimator for Level-2 stacking (default: ridge)")
     pred_parser.add_argument("--oof-timeout", type=float, default=300.0, help="OOF time budget in seconds, checked between fits (default: 300)")
+    pred_parser.add_argument("--holdout-dataset", default=None, help="Optional independent holdout dataset path for candidate promotion validation")
+    pred_parser.add_argument("--holdout-ratio", type=float, default=0.0, help="Optional holdout fraction (e.g. 0.2) for independent candidate validation")
+    pred_parser.add_argument("--min-improvement", type=float, default=0.0, help="Minimum delta on holdout score required to promote candidate (default: 0.0)")
     pred_parser.add_argument("--json", action="store_true")
     pred_parser.set_defaults(func=predict_cli)
 

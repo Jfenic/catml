@@ -34,6 +34,9 @@ class OOFResult:
     training_seconds: float
     weights: dict[str, float] | None = None
     method: str = "average"
+    holdout_scores: dict[str, float] | None = None
+    holdout_delta: float | None = None
+    stacking_residuals: dict[str, float] | None = None
 
 
 def evaluate_oof(
@@ -48,6 +51,8 @@ def evaluate_oof(
     max_seconds: float = 300.0,
     check_allowed: Callable[[], None] | None = None,
     progress: Callable[[int, int, str], None] | None = None,
+    X_holdout: pd.DataFrame | None = None,
+    y_holdout: pd.Series | None = None,
 ) -> OOFResult:
     if isinstance(folds, bool) or not isinstance(folds, int) or folds < 2:
         raise ValueError("folds must be an integer >= 2")
@@ -80,6 +85,20 @@ def evaluate_oof(
         raise ValueError("OOF currently supports binary classification only")
     if np.bincount(target).min() < folds:
         raise ValueError("Each target class must have at least folds rows")
+
+    has_holdout = X_holdout is not None and y_holdout is not None
+    if has_holdout:
+        if X_holdout.empty or len(X_holdout) != len(y_holdout) or y_holdout.isna().any():
+            raise ValueError("Holdout features and target must be nonempty and aligned")
+        if list(X.columns) != list(X_holdout.columns):
+            raise ValueError("Train and holdout feature columns must match")
+        holdout_target = encoder.transform(y_holdout)
+        if len(np.unique(holdout_target)) < 2:
+            raise ValueError("Holdout target must contain both binary classes")
+        holdout_folds = {name: [] for name in factories}
+    else:
+        holdout_target = None
+        holdout_folds = None
 
     started = monotonic()
     oof = {name: np.full(len(X), np.nan) for name in factories}
@@ -129,6 +148,8 @@ def evaluate_oof(
             valid_probs = probabilities(pipeline, X.iloc[valid_idx])
             oof[name][valid_idx] = valid_probs
             test_folds[name].append(probabilities(pipeline, X_test))
+            if has_holdout:
+                holdout_folds[name].append(probabilities(pipeline, X_holdout))
             fold_scores[name].append(float(roc_auc_score(target[valid_idx], valid_probs)))
             completed += 1
             if progress:
@@ -140,6 +161,7 @@ def evaluate_oof(
     test_list = list(test.values())
     model_names = list(factories.keys())
     weights: dict[str, float] | None = None
+    fitted_meta: Any = None
 
     if canonical_method == "average":
         blended_oof = blend_predictions(oof_list, method="average")
@@ -195,6 +217,48 @@ def evaluate_oof(
             if len(raw_coefs) == len(model_names):
                 weights = {name: float(c) for name, c in zip(model_names, raw_coefs)}
 
+    # Holdout validation (Independent holdout evaluation before promotion)
+    holdout_scores: dict[str, float] | None = None
+    holdout_delta: float | None = None
+    blended_holdout: np.ndarray | None = None
+
+    if has_holdout:
+        holdout_preds = {name: blend_predictions(values) for name, values in holdout_folds.items()}
+        holdout_list = [holdout_preds[name] for name in model_names]
+
+        if canonical_method in ("average", "rank"):
+            blended_holdout = blend_predictions(holdout_list, method=canonical_method)
+        elif canonical_method == "simplex":
+            blended_holdout = blend_predictions(holdout_list, weights=opt_weights, method="average")
+        elif canonical_method == "stacked" and fitted_meta is not None:
+            X_meta_holdout = np.column_stack(holdout_list)
+            if hasattr(fitted_meta, "predict_proba"):
+                blended_holdout = fitted_meta.predict_proba(X_meta_holdout)[:, 1]
+            else:
+                blended_holdout = np.clip(fitted_meta.predict(X_meta_holdout), 0.0, 1.0)
+        else:
+            blended_holdout = blend_predictions(holdout_list, method="average")
+
+        holdout_scores = {name: float(roc_auc_score(holdout_target, values)) for name, values in holdout_preds.items()}
+        holdout_scores["oof_blend"] = float(roc_auc_score(holdout_target, blended_holdout))
+        holdout_delta = float(holdout_scores["oof_blend"] - holdout_scores[model_names[0]])
+
+    # Stacking residual diagnostics
+    stacking_residuals: dict[str, float] | None = None
+    if canonical_method == "stacked":
+        residuals = target - blended_oof
+        stacking_residuals = {
+            "mean_residual": float(np.mean(residuals)),
+            "std_residual": float(np.std(residuals)),
+            "max_abs_residual": float(np.max(np.abs(residuals))),
+            "brier_score": float(np.mean(residuals ** 2)),
+        }
+        if has_holdout and blended_holdout is not None:
+            h_residuals = holdout_target - blended_holdout
+            stacking_residuals["holdout_mean_residual"] = float(np.mean(h_residuals))
+            stacking_residuals["holdout_std_residual"] = float(np.std(h_residuals))
+            stacking_residuals["holdout_brier_score"] = float(np.mean(h_residuals ** 2))
+
     # Compute fold scores for the blend consistently
     for fold in range(folds):
         fold_mask = fold_ids == fold
@@ -217,5 +281,8 @@ def evaluate_oof(
         training_seconds=monotonic() - started,
         weights=weights,
         method=canonical_method,
+        holdout_scores=holdout_scores,
+        holdout_delta=holdout_delta,
+        stacking_residuals=stacking_residuals,
     )
 

@@ -55,8 +55,8 @@ jobs:
   pip-audit:
     runs-on: ubuntu-latest
     needs: test
-    # Advisory noise may still appear on PR CI; release verify gate is blocking.
-    continue-on-error: true
+    # Advisory by default on PR CI; hard-fails when CATML_AUDIT_STRICT is set to true.
+    continue-on-error: ${{ env.CATML_AUDIT_STRICT != 'true' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
