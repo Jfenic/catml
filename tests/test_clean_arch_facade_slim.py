@@ -144,3 +144,122 @@ def test_facade_delegation_lifecycle(tmp_path: Path):
     assert resumed_results
     cancelled = ws.cancel_run(run.id)
     assert cancelled.status == RunStatus.CANCELLED
+
+
+def test_service_property_setters(tmp_path: Path):
+    ws = AutoMLWorkspace.create("setter_test", root_dir=tmp_path / "ws_setters")
+    sentinel = object()
+    ws.dataset_service = sentinel
+    assert ws.dataset_service is sentinel
+
+    ws.run_service = sentinel
+    assert ws.run_service is sentinel
+
+    ws.feature_service = sentinel
+    assert ws.feature_service is sentinel
+
+
+def test_run_service_exclude_and_include_model_consistency(tmp_path: Path):
+    ws = AutoMLWorkspace.create("model_scoping", root_dir=tmp_path / "ws_scope")
+    csv_path = _sample_binary_df(tmp_path)
+    ds = ws.register_dataset("scope_ds", csv_path, target="target", task_type="binary_classification")
+    run = ws.create_run(ds)
+
+    # 1. Include model
+    ws.include_model(run, "random_forest")
+    assert "random_forest" in run.config.models_include
+    assert "random_forest" not in run.config.models_exclude
+
+    # 2. Exclude the same model -> must be removed from models_include
+    ws.exclude_model(run, "random_forest")
+    assert "random_forest" in run.config.models_exclude
+    assert "random_forest" not in run.config.models_include
+
+    # 3. Re-include -> must be removed from models_exclude
+    ws.include_model(run, "random_forest")
+    assert "random_forest" in run.config.models_include
+    assert "random_forest" not in run.config.models_exclude
+
+
+def test_dataset_service_get_meta_knowledge_with_trials(tmp_path: Path):
+    ws = AutoMLWorkspace.create("meta_trials", root_dir=tmp_path / "ws_meta")
+    csv_path = _sample_binary_df(tmp_path, n=60)
+    ds = ws.register_dataset("meta_ds", csv_path, target="target", task_type="binary_classification")
+    run = ws.create_run(ds, metric="roc_auc", cv_folds=2, random_seed=42)
+
+    exp = ws.create_experiment(
+        run=run,
+        name="meta_exp",
+        feature_names=["feature1", "feature2"],
+        model_ids=["logistic_regression", "random_forest"],
+    )
+    results = ws.run_experiment(run, exp)
+    assert len(results) == 2
+
+    # Now call get_meta_knowledge - it must correctly find trial results via get_leaderboard(r.id)
+    knowledge = ws.get_meta_knowledge(ds.id)
+    assert knowledge is not None
+    assert knowledge.dataset_name == "meta_ds"
+    assert len(knowledge.historical_rankings) > 0
+
+
+def test_feature_engineering_service_direct_and_cqrs(tmp_path: Path):
+    from automl.application.bootstrap import build_application
+    from automl.application.commands.workspace_commands import (
+        ExcludeFeatureCommand,
+        PrioritizeFeatureCommand,
+        PromoteCandidateFeatureSetCommand,
+        SelectFeaturesCommand,
+    )
+
+    ws, cmd, qry = build_application(root_dir=str(tmp_path / "ws_feature"))
+    rng = np.random.default_rng(42)
+    df = pd.DataFrame(
+        {
+            "feature1": rng.normal(size=60),
+            "feature2": rng.normal(size=60),
+            "feature3": rng.normal(size=60),
+            "feature4": rng.normal(size=60),
+            "feature5": rng.normal(size=60),
+            "target": [0, 1] * 30,
+        }
+    )
+    csv_path = tmp_path / "feat_sample.csv"
+    df.to_csv(csv_path, index=False)
+    ds = ws.register_dataset("feat_ds", csv_path, target="target", task_type="binary_classification")
+    run = ws.create_run(ds)
+
+    # 1. Feature operations via FeatureEngineeringService
+    reg = ws.feature_service.get_feature_registry(ds.id)
+    assert reg.get("feature1") is not None
+
+    fset = ws.feature_service.create_feature_set(ds.id, "my_features", ["feature1"])
+    assert fset.name == "my_features"
+    listed_fsets = ws.feature_service.list_feature_sets(ds.id)
+    assert len(listed_fsets) == 1
+
+    ws.feature_service.prioritize_feature(ds.id, "feature1", score=0.8, run_id=run.id)
+    assert "feature1" in run.config.features_priority
+
+    ws.feature_service.exclude_feature(ds.id, "feature2", run_id=run.id)
+    assert "feature2" in run.config.features_excluded
+
+    # 2. Task types catalog from DatasetService
+    task_types = ws.list_task_types()
+    assert len(task_types) >= 3
+
+    # 3. CQRS Select and Promote with allow_unverified_promotion=True
+    candidates = cmd.dispatch(SelectFeaturesCommand(run.id))
+    assert len(candidates) > 0
+    top_cand = candidates[0]
+
+    promoted = cmd.dispatch(
+        PromoteCandidateFeatureSetCommand(
+            run_id=run.id,
+            candidate_id=top_cand.id,
+            new_name="cqrs_promoted",
+            allow_unverified_promotion=True,
+        )
+    )
+    assert promoted.name == "cqrs_promoted"
+    assert len(promoted.feature_names) > 0

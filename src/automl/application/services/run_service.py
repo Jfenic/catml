@@ -170,6 +170,8 @@ class RunService:
         self.workspace.model_registry.validate_for_task([model_id], run.config.task_type)
         if model_id not in run.config.models_exclude:
             run.config.models_exclude.append(model_id)
+        if model_id in run.config.models_include:
+            run.config.models_include.remove(model_id)
         self.workspace.repository.save_run(run)
         self.workspace._emit("ModelExcluded", {"model_id": model_id}, run_id=run.id)
 

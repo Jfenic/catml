@@ -34,11 +34,9 @@ from automl.domain.ports import (
 )
 from automl.domain.runs.run import AutoMLRun
 from automl.domain.tasks.problem_definition import ProblemDefinition
-from automl.domain.tasks.task_type import TASK_CATALOG, TaskType
 from automl.engine.planning.experiment_planner import RuleBasedExperimentPlanner
 from automl.engine.priority.scheduler import ExperimentQueue, Scheduler
 from automl.engine.priority.scorer import RuleBasedPriorityScorer
-from automl.engine.profiling.dataset_profiler import profile_dataset
 from automl.infrastructure.database.sqlite_repository import SQLiteExperimentRepository
 from automl.plugins.metrics.business_metrics import (
     CostSensitiveMetricPlugin,
@@ -114,6 +112,10 @@ class AutoMLWorkspace:
             self._dataset_service = DatasetService(self)
         return self._dataset_service
 
+    @dataset_service.setter
+    def dataset_service(self, value: Any) -> None:
+        self._dataset_service = value
+
     @property
     def run_service(self):
         if self._run_service is None:
@@ -122,6 +124,10 @@ class AutoMLWorkspace:
             self._run_service = RunService(self)
         return self._run_service
 
+    @run_service.setter
+    def run_service(self, value: Any) -> None:
+        self._run_service = value
+
     @property
     def experiment_service(self):
         if self._experiment_service is None:
@@ -129,6 +135,10 @@ class AutoMLWorkspace:
 
             self._experiment_service = ExperimentService(self)
         return self._experiment_service
+
+    @experiment_service.setter
+    def experiment_service(self, value: Any) -> None:
+        self._experiment_service = value
 
     @property
     def planning_service(self):
@@ -140,6 +150,10 @@ class AutoMLWorkspace:
             self._planning_service = ExperimentPlanningService(self)
         return self._planning_service
 
+    @planning_service.setter
+    def planning_service(self, value: Any) -> None:
+        self._planning_service = value
+
     @property
     def ensemble_service(self):
         if self._ensemble_service is None:
@@ -147,6 +161,10 @@ class AutoMLWorkspace:
 
             self._ensemble_service = EnsembleService(self)
         return self._ensemble_service
+
+    @ensemble_service.setter
+    def ensemble_service(self, value: Any) -> None:
+        self._ensemble_service = value
 
     @property
     def pipeline_service(self):
@@ -158,6 +176,10 @@ class AutoMLWorkspace:
             self._pipeline_service = PipelineExecutionService(self)
         return self._pipeline_service
 
+    @pipeline_service.setter
+    def pipeline_service(self, value: Any) -> None:
+        self._pipeline_service = value
+
     @property
     def inference_service(self):
         if self._inference_service is None:
@@ -165,6 +187,10 @@ class AutoMLWorkspace:
 
             self._inference_service = InferenceService(self)
         return self._inference_service
+
+    @inference_service.setter
+    def inference_service(self, value: Any) -> None:
+        self._inference_service = value
 
     @property
     def feature_service(self):
@@ -176,6 +202,10 @@ class AutoMLWorkspace:
             self._feature_service = FeatureEngineeringService(self)
         return self._feature_service
 
+    @feature_service.setter
+    def feature_service(self, value: Any) -> None:
+        self._feature_service = value
+
     @property
     def experiment_execution_service(self):
         if self._experiment_execution_service is None:
@@ -186,6 +216,10 @@ class AutoMLWorkspace:
             self._experiment_execution_service = ExperimentExecutionService(self)
         return self._experiment_execution_service
 
+    @experiment_execution_service.setter
+    def experiment_execution_service(self, value: Any) -> None:
+        self._experiment_execution_service = value
+
     @property
     def optimization_service(self):
         if self._optimization_service is None:
@@ -195,6 +229,10 @@ class AutoMLWorkspace:
 
             self._optimization_service = OptimizationService(self)
         return self._optimization_service
+
+    @optimization_service.setter
+    def optimization_service(self, value: Any) -> None:
+        self._optimization_service = value
 
     def _get_or_create_run_deadline(self, run: AutoMLRun) -> float | None:
         return self.run_service._get_or_create_run_deadline(run)
@@ -294,7 +332,7 @@ class AutoMLWorkspace:
         return self.experiment_service.get_leaderboard_results(run_id, include_failed=include_failed)
 
     def list_feature_sets(self, dataset_id: str) -> list[Any]:
-        return self.repository.list_feature_sets(dataset_id)
+        return self.feature_service.list_feature_sets(dataset_id)
 
     def register_dataset(
         self,
@@ -411,12 +449,7 @@ class AutoMLWorkspace:
             pass
 
     def get_feature_registry(self, dataset_id: str) -> FeatureRegistry:
-        if dataset_id not in self._feature_registries:
-            self._hydrate_feature_registry(dataset_id)
-        registry = self._feature_registries.get(dataset_id)
-        if registry is None:
-            raise KeyError(f"No feature registry for dataset {dataset_id}")
-        return registry
+        return self.feature_service.get_feature_registry(dataset_id)
 
     def create_feature_set(
         self,
@@ -425,16 +458,9 @@ class AutoMLWorkspace:
         feature_names: list[str],
         lineage: str = "",
     ) -> FeatureSet:
-        feature_set = FeatureSet(
-            id=f"fset_{uuid.uuid4().hex[:8]}",
-            dataset_id=dataset_id,
-            name=name,
-            feature_names=feature_names,
-            lineage=lineage,
+        return self.feature_service.create_feature_set(
+            dataset_id=dataset_id, name=name, feature_names=feature_names, lineage=lineage
         )
-        self.repository.save_feature_set(feature_set)
-        self._emit("FeatureSetCreated", feature_set.to_dict())
-        return feature_set
 
     def create_experiment(
         self,
@@ -607,47 +633,13 @@ class AutoMLWorkspace:
         )
 
     def list_task_types(self) -> list[dict]:
-        rows = []
-        for task in TaskType:
-            catalog = TASK_CATALOG[task]
-            rows.append(
-                {
-                    "task_type": task.value,
-                    "label": catalog["label"],
-                    "description": catalog["description"],
-                    "default_metric": catalog["default_metric"],
-                    "metrics": catalog["metrics"],
-                    "models": catalog["model_ids"],
-                }
-            )
-        return rows
+        return self.dataset_service.list_task_types()
 
     def exclude_feature(self, dataset_id: str, name: str, run_id: str | None = None) -> None:
-        feature = self.get_feature_registry(dataset_id).get(name)
-        if feature is None:
-            raise KeyError(f"Feature not found: {name}")
-        feature.exclude()
-        self.repository.save_feature(feature)
-        if run_id:
-            run = self._get_run(run_id)
-            if name not in run.config.features_excluded:
-                run.config.features_excluded.append(name)
-            self.repository.save_run(run)
-        self._emit("FeatureExcluded", {"dataset_id": dataset_id, "feature": name}, run_id=run_id)
+        self.feature_service.exclude_feature(dataset_id, name, run_id=run_id)
 
     def exclude_identifiers(self, dataset_id: str, run_id: str | None = None) -> list[str]:
-        profile = self.repository.get_dataset_profile(dataset_id)
-        if profile is None:
-            dataset = self._get_dataset(dataset_id)
-            profile = profile_dataset(dataset)
-            self.repository.save_dataset_profile(profile)
-
-        excluded: list[str] = []
-        for name in profile.identifier_column_names:
-            if name != profile.target_column:
-                self.exclude_feature(dataset_id, name, run_id=run_id)
-                excluded.append(name)
-        return excluded
+        return self.feature_service.exclude_identifiers(dataset_id, run_id=run_id)
 
     def prioritize_feature(
         self,
@@ -656,21 +648,7 @@ class AutoMLWorkspace:
         score: float = 1.0,
         run_id: str | None = None,
     ) -> None:
-        feature = self.get_feature_registry(dataset_id).get(name)
-        if feature is None:
-            raise KeyError(f"Feature not found: {name}")
-        feature.prioritize(score)
-        self.repository.save_feature(feature)
-        if run_id:
-            run = self._get_run(run_id)
-            if name not in run.config.features_priority:
-                run.config.features_priority.append(name)
-            self.repository.save_run(run)
-        self._emit(
-            "FeaturePrioritized",
-            {"dataset_id": dataset_id, "feature": name, "score": score},
-            run_id=run_id,
-        )
+        self.feature_service.prioritize_feature(dataset_id, name, score=score, run_id=run_id)
 
     def exclude_model(self, run: AutoMLRun, model_id: str) -> None:
         self.run_service.exclude_model(run, model_id)

@@ -241,10 +241,28 @@ class DatasetService:
             runs = ws.repository.list_runs()
             for r in runs:
                 if r.dataset_id == dataset_id:
-                    results = ws.repository.list_trial_results(r.id)
+                    results = ws.repository.get_leaderboard(r.id)
                     trials.extend(results)
         except Exception:
             pass
 
         kb = MetaKnowledgeBase()
         return kb.synthesize(fingerprint, workspace_trials=trials if trials else None)
+
+    def list_task_types(self) -> list[dict[str, Any]]:
+        from automl.domain.tasks.task_type import TASK_CATALOG, TaskType
+
+        rows = []
+        for task in TaskType:
+            catalog = TASK_CATALOG[task]
+            rows.append(
+                {
+                    "task_type": task.value,
+                    "label": catalog["label"],
+                    "description": catalog["description"],
+                    "default_metric": catalog["default_metric"],
+                    "metrics": catalog["metrics"],
+                    "models": catalog["model_ids"],
+                }
+            )
+        return rows

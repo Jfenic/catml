@@ -7,6 +7,7 @@ import pandas as pd
 from automl.domain.experiments.candidate import ExperimentCandidate
 from automl.domain.features.evidence import FeatureEvidence
 from automl.domain.features.feature_set import FeatureSet
+from automl.domain.features.registry import FeatureRegistry
 from automl.domain.features.selection_strategy import (
     FeatureRank,
     FeatureSelectionStrategy,
@@ -604,3 +605,88 @@ class FeatureEngineeringService:
         if method:
             ranks = [r for r in ranks if r.method == method]
         return [r.to_dict() for r in ranks]
+
+    def get_feature_registry(self, dataset_id: str) -> FeatureRegistry:
+        ws = self.workspace
+        if dataset_id not in ws._feature_registries:
+            ws._hydrate_feature_registry(dataset_id)
+        registry = ws._feature_registries.get(dataset_id)
+        if registry is None:
+            raise KeyError(f"No feature registry for dataset {dataset_id}")
+        return registry
+
+    def list_feature_sets(self, dataset_id: str) -> list[Any]:
+        return self.workspace.repository.list_feature_sets(dataset_id)
+
+    def create_feature_set(
+        self,
+        dataset_id: str,
+        name: str,
+        feature_names: list[str],
+        lineage: str = "",
+    ) -> FeatureSet:
+        import uuid
+
+        feature_set = FeatureSet(
+            id=f"fset_{uuid.uuid4().hex[:8]}",
+            dataset_id=dataset_id,
+            name=name,
+            feature_names=feature_names,
+            lineage=lineage,
+        )
+        self.workspace.repository.save_feature_set(feature_set)
+        self.workspace._emit("FeatureSetCreated", feature_set.to_dict())
+        return feature_set
+
+    def exclude_feature(self, dataset_id: str, name: str, run_id: str | None = None) -> None:
+        ws = self.workspace
+        feature = self.get_feature_registry(dataset_id).get(name)
+        if feature is None:
+            raise KeyError(f"Feature not found: {name}")
+        feature.exclude()
+        ws.repository.save_feature(feature)
+        if run_id:
+            run = ws._get_run(run_id)
+            if name not in run.config.features_excluded:
+                run.config.features_excluded.append(name)
+            ws.repository.save_run(run)
+        ws._emit("FeatureExcluded", {"dataset_id": dataset_id, "feature": name}, run_id=run_id)
+
+    def exclude_identifiers(self, dataset_id: str, run_id: str | None = None) -> list[str]:
+        ws = self.workspace
+        profile = ws.repository.get_dataset_profile(dataset_id)
+        if profile is None:
+            dataset = ws._get_dataset(dataset_id)
+            profile = profile_dataset(dataset)
+            ws.repository.save_dataset_profile(profile)
+
+        excluded: list[str] = []
+        for name in profile.identifier_column_names:
+            if name != profile.target_column:
+                self.exclude_feature(dataset_id, name, run_id=run_id)
+                excluded.append(name)
+        return excluded
+
+    def prioritize_feature(
+        self,
+        dataset_id: str,
+        name: str,
+        score: float = 1.0,
+        run_id: str | None = None,
+    ) -> None:
+        ws = self.workspace
+        feature = self.get_feature_registry(dataset_id).get(name)
+        if feature is None:
+            raise KeyError(f"Feature not found: {name}")
+        feature.prioritize(score)
+        ws.repository.save_feature(feature)
+        if run_id:
+            run = ws._get_run(run_id)
+            if name not in run.config.features_priority:
+                run.config.features_priority.append(name)
+            ws.repository.save_run(run)
+        ws._emit(
+            "FeaturePrioritized",
+            {"dataset_id": dataset_id, "feature": name, "score": score},
+            run_id=run_id,
+        )

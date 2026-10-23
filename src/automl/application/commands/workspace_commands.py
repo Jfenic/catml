@@ -148,6 +148,7 @@ class PromoteCandidateFeatureSetCommand:
     run_id: str
     candidate_id: str
     new_name: str | None = None
+    allow_unverified_promotion: bool = False
 
 
 @dataclass(frozen=True)

@@ -13,7 +13,9 @@ from automl.application.commands.workspace_commands import (
     OptimizeExperimentCommand,
     PlanExperimentsCommand,
     PrioritizeFeatureCommand,
+    PromoteCandidateFeatureSetCommand,
     RunExperimentCommand,
+    SelectFeaturesCommand,
 )
 from automl.application.services.workspace import PLATFORM_VERSION, AutoMLWorkspace
 
@@ -256,14 +258,16 @@ class BenchmarkRunner:
     def _setup_feature_selection_v05(self, ws, cmd, qry):
         dataset, run = self._register_base(ws)
         cmd.dispatch(ExcludeFeatureCommand(dataset.id, "customer_id", run_id=run.id))
-        candidates = ws.select_features(run.id)
+        candidates = cmd.dispatch(SelectFeaturesCommand(run.id))
         top_cand = candidates[0] if candidates else None
         if top_cand:
-            promoted = ws.promote_candidate_feature_set(
-                run_id=run.id,
-                candidate_id=top_cand.id,
-                new_name="v05_selected_features",
-                allow_unverified_promotion=True,
+            promoted = cmd.dispatch(
+                PromoteCandidateFeatureSetCommand(
+                    run_id=run.id,
+                    candidate_id=top_cand.id,
+                    new_name="v05_selected_features",
+                    allow_unverified_promotion=True,
+                )
             )
             feature_names = promoted.feature_names
             feature_set_id = promoted.id

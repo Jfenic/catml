@@ -75,6 +75,7 @@ def register_feature_handlers(
             cmd.run_id,
             cmd.candidate_id,
             new_name=cmd.new_name,
+            allow_unverified_promotion=cmd.allow_unverified_promotion,
         ),
     )
     command_bus.register(
