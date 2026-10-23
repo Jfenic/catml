@@ -106,7 +106,7 @@ class AutoMLWebHandler(BaseHTTPRequestHandler):
         - If ``Origin`` is present, require loopback or same Host as the request.
         Missing Origin / Sec-Fetch-Site (CLI, urlopen, older clients) is allowed.
         """
-        headers = self.headers if hasattr(self, "headers") and self.headers else {}
+        headers: Any = self.headers if hasattr(self, "headers") and self.headers else {}
         content_type = (headers.get("Content-Type") or "").split(";", 1)[0].strip().lower()
         if content_type != "application/json":
             self._send_json(

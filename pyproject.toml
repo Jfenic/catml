@@ -110,6 +110,9 @@ version = {attr = "automl.__version__"}
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+filterwarnings = [
+    "ignore:Setting the shape on a NumPy array has been deprecated in NumPy 2.5:DeprecationWarning:joblib.*",
+]
 
 # Clean Arch PR5 — gradual quality gates (domain strict; application ignores debt).
 [tool.ruff]

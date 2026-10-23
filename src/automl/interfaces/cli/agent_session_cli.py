@@ -228,7 +228,7 @@ def session_status_cli(args: argparse.Namespace) -> int:
 
         engine = getattr(args, "engine", "deterministic")
         graph_data: dict[str, Any] | None = None
-        if engine == "langgraph" and is_langgraph_available() and SqliteCheckpointSaver:
+        if engine == "langgraph" and is_langgraph_available() and SqliteCheckpointSaver is not None:
             try:
                 cp = SqliteCheckpointSaver(ledger.db_path)
                 graph_data = cp.get_latest_state(session_id)

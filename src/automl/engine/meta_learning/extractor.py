@@ -61,7 +61,7 @@ def extract_fingerprint(
     return DatasetFingerprint(
         dataset_id=dataset.id,
         dataset_name=dataset.name,
-        task_type=dataset.task_type,
+        task_type=dataset.task_type or "binary_classification",
         row_count=row_count,
         feature_count=feature_count,
         numerical_feature_count=num_cols,

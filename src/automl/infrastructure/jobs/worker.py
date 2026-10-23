@@ -1,6 +1,8 @@
 import sys
 import threading
 
+from typing import Any
+
 from automl.application.bootstrap import build_application
 from automl.application.services.job_executor import JobExecutor, JobStopped
 from automl.domain.jobs.job import JobStatus
@@ -14,8 +16,8 @@ class JobWorker:
         self.repository = SQLiteJobRepository(workspace.repository.db_path)
         self.lock_path = workspace.root_dir / "worker.lock"
         self._stop = threading.Event()
-        self._thread = None
-        self._lease = None
+        self._thread: threading.Thread | None = None
+        self._lease: Any = None
         self._executing = False
 
     def start(self, background: bool = True):

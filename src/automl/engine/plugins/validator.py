@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from typing import Any
+
+from automl.domain.plugins.plugin import PluginCapability
 from automl.domain.ports import PluginPort
 
 

@@ -28,9 +28,9 @@ def _check_import(module_name: str) -> tuple[bool, str]:
         return False, f"error: {e}"
 
 
-def run_doctor_diagnostics(workspace_dir: str | Path | None = None) -> dict:
+def run_doctor_diagnostics(workspace_dir: str | Path | None = None) -> dict[str, Any]:
     """Run full environment diagnostics and return structured dictionary."""
-    results = {
+    results: dict[str, Any] = {
         "platform_version": PLATFORM_VERSION,
         "python": {
             "version": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",

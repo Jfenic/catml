@@ -110,7 +110,7 @@ def diagnose_univariate_distributions(
                     summary=f"Rechazo de normalidad para '{col}' ({test_method.split('.')[-1]}, stat={norm_stat:.3f}, p={norm_p:.4e}).",
                     column_name=col,
                     method_name=test_method,
-                    metrics={"test_statistic": round(norm_stat, 4), "sample_size": n},
+                    metrics={"test_statistic": round(norm_stat, 4) if norm_stat is not None else 0.0, "sample_size": n},
                     p_value=norm_p,
                     limitations=["En muestras grandes, pruebas de normalidad rechazan H0 incluso ante desviaciones menores."],
                 )

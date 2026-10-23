@@ -58,7 +58,7 @@ def build_sklearn_model(model_id: str, task_type: str, parameters: dict | None =
             else ExtraTreesClassifier(**et_params)
         )
     elif model_id == "mlp":
-        mlp_params = {"max_iter": 500, "random_state": 42}
+        mlp_params = {"max_iter": 500, "random_state": 42, "early_stopping": True}
         mlp_params.update(params)
         return (
             MLPRegressor(**mlp_params)

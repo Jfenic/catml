@@ -28,7 +28,7 @@ def run_mcp_cli(args: argparse.Namespace) -> int:
                 "SECURITY NOTICE: --allow-mutations disables PENDING_APPROVAL for "
                 "mutating MCP tools. Local/dev only.\n"
             )
-        kwargs = {
+        kwargs: dict[str, Any] = {
             "root_dir": workspace_path,
             "transport": transport,
             "host": host,

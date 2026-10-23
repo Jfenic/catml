@@ -106,8 +106,8 @@ def create_mcp_server(
     ws_path = str(workspace.root_dir) if workspace and hasattr(workspace, "root_dir") else "."
 
     server = MCPServer("catml-mcp", version=__version__)
-    server.executor = executor
-    server.ledger = ledger
+    server.executor = executor  # type: ignore[attr-defined]
+    server.ledger = ledger  # type: ignore[attr-defined]
 
     # -----------------------------------------------------------------------
     # Query Tools (Milestone H1)
@@ -287,7 +287,7 @@ def create_mcp_server(
         approval_id: str | None = None,
     ) -> types.CallToolResult:
         try:
-            arguments = {
+            arguments: dict[str, Any] = {
                 "run_id": run_id,
                 "model_name": model_name,
             }
