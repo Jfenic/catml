@@ -81,10 +81,13 @@ CSV examples under `examples/data/` ship with the **Git repository**, not the Py
 ## Quickstart (Command Line)
 
 ```bash
-# After cloning the repo (examples/ is not inside the wheel):
+# 1. Verify your environment, hardware acceleration, and optional backends
+catml doctor
+
+# 2. Fit candidate AutoML models on a dataset (examples/ is in the Git repo)
 catml fit examples/data/customers_churn.csv --target churn
 
-# Or point at any local CSV after pip install:
+# 3. Or point at any local CSV with JSON-formatted machine output
 catml fit data.csv --target churn --models logistic_regression,random_forest --json
 ```
 
@@ -173,6 +176,38 @@ Available tools exposed to AI agents:
 - `create_experiment`: Propose targeted hypothesis-driven experiment runs.
 - `get_leaderboard`: Inspect ranked metric scores and cross-validation variance.
 - `cancel_operation`: Cooperative cancellation under budget constraints.
+
+### How AI Agents Use CATML via MCP (Real-World Flow)
+
+When an AI agent connects via MCP, CATML enforces strict CQRS separation and human-in-the-loop safety governance:
+
+1. **Discovery & Dataset Profiling (Zero Side-Effects):**
+   The agent calls `get_dataset_profile` to inspect column types, cardinality, and missingness without mutating state:
+   ```json
+   // Agent calls: get_dataset_profile(dataset_id="ds_churn")
+   // CATML returns:
+   {
+     "row_count": 10000,
+     "column_count": 14,
+     "target_column": "churn",
+     "task_type": "binary_classification"
+   }
+   ```
+
+2. **Hypothesis Proposal with Approval Gate:**
+   When the agent proposes a modeling hypothesis via `create_experiment`, CATML intercepts the mutating action according to workspace policy:
+   ```json
+   // Agent calls: create_experiment(run_id="run_01", model_name="random_forest")
+   // CATML returns governance lease:
+   {
+     "status": "PENDING_APPROVAL",
+     "approval_id": "appr-876d21bd24740517",
+     "message": "Action 'create_experiment' requires human approval. Run: automl agent approve appr-876d21bd24740517"
+   }
+   ```
+
+3. **Leaderboard Inspection:**
+   Once verified, the agent retrieves the cross-validated rankings via `get_leaderboard(run_id="run_01", top_k=3)` to determine next steps.
 
 ---
 
@@ -299,6 +334,20 @@ pytest
 # Run tests with strict coverage validation (>= 85%)
 pytest --cov=src/automl --cov-fail-under=85
 ```
+
+---
+
+## Interactive Validation Notebooks
+
+The repository ships with focused, self-contained fire-test notebooks under [`notebooks/fire_tests/`](notebooks/fire_tests/):
+
+| Notebook | Topic / Workflow | Description |
+|---|---|---|
+| [`01_titanic_like.ipynb`](notebooks/fire_tests/01_titanic_like.ipynb) | Binary Classification Baseline | End-to-end baseline modeling, feature imputation, and scoring. |
+| [`03_credit_risk.ipynb`](notebooks/fire_tests/03_credit_risk.ipynb) | Anti-Leakage Guardian | Real-world simulation of target contamination and automatic feature isolation. |
+| [`04_multiclass.ipynb`](notebooks/fire_tests/04_multiclass.ipynb) | Multiclass Classification | Multi-target probability calibration and log-loss optimization. |
+| [`08_export_predict.ipynb`](notebooks/fire_tests/08_export_predict.ipynb) | Production Artifacts | Exporting `model.pkl` + `.sha256` sidecar and running offline inference. |
+| [`10_ensemble_compare.ipynb`](notebooks/fire_tests/10_ensemble_compare.ipynb) | Stacking & Blending | Multi-model Out-of-Fold (OOF) blending vs level-2 super learner stacking. |
 
 ---
 

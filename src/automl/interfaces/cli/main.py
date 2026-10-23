@@ -748,6 +748,12 @@ def main(argv: list[str] | None = None) -> int:
     fit_p.add_argument("--json", action="store_true", help="Output results as JSON")
     fit_p.set_defaults(func=fit_cli)
 
+    doctor_p = sub.add_parser("doctor", help="Inspect environment dependencies, hardware acceleration, and workspace health")
+    doctor_p.add_argument("--workspace", default=None, help="Path to workspace root to probe")
+    doctor_p.add_argument("--json", action="store_true", help="Output diagnostic report as machine-readable JSON")
+    from automl.interfaces.cli.doctor_cli import run_doctor_cli
+    doctor_p.set_defaults(func=run_doctor_cli)
+
     demo = sub.add_parser("run-demo", help="Run demo experiment via CommandBus")
     demo.add_argument("--dataset")
     demo.add_argument("--workspace")
