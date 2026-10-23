@@ -1,6 +1,6 @@
 # Blending de predicciones out-of-fold — primera versión
 
-Estado: flujo inicial implementado para clasificación binaria con ROC-AUC. Consultar [TASKS.md](../../../TASKS.md). La evaluación independiente para promover un candidato sigue pendiente; este flujo no promueve automáticamente resultados.
+Estado: Implementado y completado para clasificación binaria con ROC-AUC, evaluación en holdout independiente, validación honesta de promoción de candidatos (`promoted`) y diagnóstico de residuos de stacking. Consultar [TASKS.md](../../../TASKS.md).
 
 ## Objetivo
 
@@ -28,12 +28,13 @@ Comparar blending de modelos entrenados con cinco folds estratificados frente a 
 automl predict --workspace .automl/demo --run-id RUN_ID \
   --experiment-id SOURCE_EXPERIMENT_ID --test-dataset data/test.csv \
   --template data/sample_submission.csv --output submission_oof.csv \
-  --folds 5 --models logistic_regression,random_forest --proba --json
+  --folds 5 --models logistic_regression,random_forest --proba --json \
+  --holdout-dataset data/holdout.csv --min-improvement 0.001
 ```
 
 `--experiment-id` identifica el experimento fuente y su lista fija de columnas, no el nuevo experimento OOF. Sin esa opción se usa el experimento no OOF de un resultado exitoso del leaderboard. Sin `--models`, se toman hasta dos modelos individuales de la fuente; una fuente compuesta usa logistic regression y random forest. El primer modelo seleccionado es el baseline declarado antes de evaluar; se reutilizan parámetros de trials exitosos de la fuente cuando existen.
 
-El flujo acepta uno o dos modelos individuales con `predict_proba`, al menos dos folds y suficientes filas por clase. Los pesos son iguales y no se ajustan con OOF. `--proba` devuelve la probabilidad de la segunda clase ordenada, registrada como `positive_class`; sin esa opción se emiten etiquetas originales con umbral 0.5.
+El flujo soporta métodos de ensembling `average`, `rank`, `simplex` y `stacked` (con meta-estimadores Ridge, LogisticRegression y Lasso). La validación contra un holdout independiente (`--holdout-dataset` o `--holdout-ratio`) garantiza que el candidato solo se promueve (`promoted=True`) si `holdout_delta > min_improvement`, reportando diagnósticos de residuos de stacking (media, std, error absoluto máximo y Brier score).
 
 El preprocesado de cada fold ajusta imputación, escalado y one-hot encoding exclusivamente con sus filas de entrenamiento. Las columnas son una hipótesis fija heredada: este flujo no recalcula selección supervisada ni target encoding. Deben proporcionarse columnas sin transformaciones previas que hayan usado el objetivo completo.
 
@@ -43,14 +44,13 @@ En el Workbench, marcar **Promediar 5 folds (OOF)** al generar la submission. El
 
 ## Artefactos y evidencia
 
-Cada experimento guarda `oof/<experiment_id>/oof.csv`, `test_predictions.csv` y `report.json`. El informe registra ROC-AUC individual y del blend, scores por fold, dispersión, delta frente al baseline, clases, parámetros, seeds, backend y versiones, hashes de datos/configuración/artefactos, tiempo y máximo de memoria del proceso cuando el sistema lo permite. Esta memoria es el máximo acumulado del proceso, no una medida aislada de cada fit.
+Cada experimento guarda `oof/<experiment_id>/oof.csv`, `test_predictions.csv` y `report.json`. El informe registra ROC-AUC individual y del blend, scores por fold, dispersión, delta frente al baseline, scores en holdout independiente, bandera de promoción honesta, residuos de stacking, clases, parámetros, seeds, backend y versiones, hashes de datos/configuración/artefactos, tiempo y máximo de memoria del proceso cuando el sistema lo permite. Esta memoria es el máximo acumulado del proceso, no una medida aislada de cada fit.
 
 El resultado se referencia desde un `TrialResult` de `oof_blend` en SQLite. Las consultas reutilizan las probabilidades guardadas para el mismo test y rechazan cambios en los datos o artefactos. Para un test diferente hay que volver a ejecutar `--folds`; los modelos de cada fold no se serializan en esta versión.
-
-La comparación OOF sirve como evidencia diagnóstica bajo pesos fijos. No garantiza un delta positivo ni reemplaza el holdout independiente requerido para promoción. No se ha acreditado una mejora de score Kaggle.
 
 | Capacidad | Implementación / pruebas |
 | --- | --- |
 | Folds, probabilidades y blending | [motor OOF](../../../src/automl/engine/ensemble/oof.py), [tests](../../../tests/test_oof_blending.py) |
+| Validación holdout y residuos de stacking | [motor OOF](../../../src/automl/engine/ensemble/oof.py), [tests](../../../tests/test_oof_holdout_and_residuals.py) |
 | Persistencia, controles y consultas | [servicio de aplicación](../../../src/automl/application/services/oof_submission.py), [tests](../../../tests/test_oof_blending.py) |
 | Paridad CLI / HTTP | [CLI](../../../src/automl/interfaces/cli/main.py), [servidor](../../../src/automl/interfaces/web/server.py), [tests](../../../tests/test_oof_blending.py) |

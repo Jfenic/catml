@@ -1,5 +1,34 @@
 # Progress
 
+### Session Summary & State for Next Session (2026-10-23)
+
+- **Completed & Pushed to GitHub `origin/main`**:
+  1. **Developer Experience & Diagnostic Tooling (`catml doctor`)**:
+     - Implemented `catml doctor` ([doctor_cli.py](file:///home/fenic/workspace/ai-ml/CATML/src/automl/interfaces/cli/doctor_cli.py)) checking OS, Python version, virtualenv isolation, core & optional dependencies (LightGBM, XGBoost, CatBoost, Optuna, Torch, etc.), CPU/RAM/GPU availability, and `.automl` workspace writeability with human-readable and `--json` outputs. Wired to CLI [main.py](file:///home/fenic/workspace/ai-ml/CATML/src/automl/interfaces/cli/main.py) and verified by [tests/test_cli_doctor.py](file:///home/fenic/workspace/ai-ml/CATML/tests/test_cli_doctor.py).
+  2. **Public Presentation & Show-Don't-Tell Documentation**:
+     - Recorded animated terminal demo GIF ([catml-demo.gif](file:///home/fenic/workspace/ai-ml/CATML/docs/assets/catml-demo.gif)) showcasing `catml doctor`, `catml analyze`, `catml fit`, `catml leaderboard`, and MCP agent server.
+     - Enriched [README.md](file:///home/fenic/workspace/ai-ml/CATML/README.md) with "¿Por qué CATML?" capability matrix (AutoML + Agentic Systems + Clean Architecture vs AutoGluon/FLAML/CrewAI), Workbench UI preview screenshot, Mermaid architecture flow, Agent MCP toolchain guide, and Interactive Validation Notebooks table.
+     - Updated GitHub repo About description (<160 chars) and 15 SEO topics via `gh repo edit`.
+  3. **Empirical Scientific Verification Loop (Propose ≠ Accept)**:
+     - Live demonstration on `examples/data/customers_churn.csv`: CATML extracted 8 statistical findings, generated a candidate hypothesis, tested it empirically against the baseline model, and mathematically rejected the candidate ($\Delta = -0.0307$) to avoid silent model regression.
+  4. **P0 Honesty & Leakage Residual Gate (Completed & Pushed)**:
+     - **Engine (`oof.py`)**: Support for independent holdout evaluation (`X_holdout`, `y_holdout`) across blending methods (`average`, `rank`, `simplex`, `stacked`), calculating `holdout_scores` and `holdout_delta` against the baseline model.
+     - **Level-2 Stacking Residuals**: Diagnostics for meta-estimators calculating mean, standard deviation, max absolute error, and Brier score calibration on both OOF and holdout.
+     - **Honest Candidate Promotion Gate (`oof_submission.py`, `workspace_commands.py`)**: Candidate blends are only marked `promoted=True` if holdout lift exceeds `--min-improvement`.
+     - **CLI (`main.py`)**: Added `--holdout-dataset`, `--holdout-ratio`, and `--min-improvement` to `automl predict`.
+     - **CI (`ci.yml`)**: Added optional strict hard-fail on `pip-audit` via `CATML_AUDIT_STRICT=true`.
+     - **Tests**: New suite [tests/test_oof_holdout_and_residuals.py](file:///home/fenic/workspace/ai-ml/CATML/tests/test_oof_holdout_and_residuals.py) (3/3 passing; 38/38 total OOF/Doctor tests green).
+- **Commits on `main`**:
+  - `6db2a20`: *docs: enrich README with terminal demo GIF, capability matrix, and architecture diagram*
+  - `1219bc8`: *feat(cli): add 'catml doctor' diagnostic tool and enrich README with agent MCP flow and validation notebooks*
+  - `2acad8a`: *feat(ensemble): implement OOF holdout validation, candidate promotion gate, and stacking residuals (P0)*
+
+- **Priority Backlog for Next Session**:
+  - **P1 Provenance & Reproducibility**: Record trial/run metadata (random seeds, CV fold partition IDs, SHA-256 dataset/pipeline hashes) in the SQLite leaderboard and export packages (`model.zip`/ONNX).
+  - **P1 Facade Slimming**: Further decompose `workspace.py` into dedicated application services.
+  - **P1 Quality Debt**: Progressive mypy checks on application layer and ESLint warning cleanups.
+  - **P2 Stable PyPI `0.9.0` Release**: Tagging and publishing the stable release once P1 provenance is verified.
+
 ### Honesty & Leakage Residual (P0) — OOF Holdout Validation, Stacking Residuals & Optional Strict Audit (2026-10-23)
 
 - **Engine (`oof.py`)**:

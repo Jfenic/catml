@@ -247,7 +247,7 @@ Fuente del estado operativo y del backlog. Las guías y los planes enlazan aquí
 - [x] Publish PyPI `0.9.0rc1` (TestPyPI + PyPI + GitHub release `v0.9.0rc1`).
 - [ ] Stable PyPI `0.9.0` after agreed robustness gates (Focus above).
 
-Open product backlog (see [Next / Roadmap Phases](#next-roadmap-phases) and **Focus — Product robustness**): OOF holdout validation; trial provenance metadata; Data Prep P3 (P1+P2 done); `feature_selection_v05` benchmark; advanced meta-learning *policies*; historical branch cleanup; deeper `workspace.py` decomposition.
+Open product backlog (see [Next / Roadmap Phases](#next-roadmap-phases) and **Focus — Product robustness**): trial provenance metadata (P1); deeper `workspace.py` decomposition (P1); application mypy gradual & quality debt (P1); stable `0.9.0` release (P2).
 
 ## Completed Phase: v0.8.2 Phase 2 — Ingestion Polymorphism, Strict CQRS Boundaries & Application Services Decomposition
 
@@ -682,7 +682,7 @@ Open product backlog (see [Next / Roadmap Phases](#next-roadmap-phases) and **Fo
 - [x] **MCP `--allow-mutations` / autonomous local mode** — blackboard [#114](https://github.com/Jfenic/catml/issues/114) (PR `fix/mcp-allow-mutations-text-svd`; default stays require-approval).
 - [x] **Text LSA (TruncatedSVD) after TF-IDF** — part of [#115](https://github.com/Jfenic/catml/issues/115) (MLP max_iter still open if needed).
 - [x] Sincronizar el índice y los planes con las capacidades actuales (revisión 2026-10-11): H0–H5, Explore E0–E6, Experiment Recipes R0–R4, stacking/OOF multi-modelo y release `0.9.0-rc1` alineados en `AGENTS.md`, `docs/README.md`, feature plans/specs, ADR-009 y `MASTER_PLAN.md`.
-- [ ] Auditar `feat/workbench-live-experiments` (WIP sin PR, 60 commits detrás de main) y los commits documentales posteriores a PR #40 en `feat/agentic-a4-specialists` antes de limpiar ramas históricas.
+- [x] Auditar `feat/workbench-live-experiments` (WIP sin PR) y ramas históricas: revisadas y preservadas como referencia histórica.
 
 > **Sistema agéntico — empieza aquí:** [`docs/features/agentic-system/README.md`](docs/features/agentic-system/README.md). Elige Persona A o B; prepara A0 o B0 y acuerda H0 antes de pasar a A1/B1.
 
