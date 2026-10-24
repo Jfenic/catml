@@ -1,5 +1,22 @@
 # Progress
 
+### External Audit Resolution — Security, Model Validation & CI Integrity (2026-10-24)
+
+- **Audit Items Resolved & Validated (8/8)**:
+  1. **CI Workflow Error (P0)**: Replaced invalid `env.CATML_AUDIT_STRICT` with `vars.CATML_AUDIT_STRICT` in `.github/workflows/ci.yml` `continue-on-error`, restoring GitHub Actions workflow parsing.
+  2. **OOF Group Data Leakage (P0)**: Upgraded `evaluate_oof` in `src/automl/engine/ensemble/oof.py` and `ensemble_service.py` to accept `groups`. Uses `StratifiedGroupKFold` (with fallback to `GroupKFold`) when `group_column` is provided, with an explicit assertion verifying disjoint train and validation groups per fold.
+  3. **Holdout Validation Leakage (P0)**: In `src/automl/application/services/oof_submission.py`, rejects identical file paths, identical SHA-256 byte hashes, overlapping row patterns (`pd.util.hash_pandas_object`), and shared entity groups between training and holdout datasets.
+  4. **Promotion Threshold Gate (P1)**: Enforced `min_improvement >= 0.0` and finite float in `oof_submission.py`. Guarded promotion so that only true positive improvement (`holdout_delta > 0.0 and holdout_delta > min_improvement`) promotes an ensemble candidate.
+  5. **Failed Trial Exclusion (P1)**: In `_get_best_trial_result` (`api/_helpers.py`) and `/api/experiments/compare` (`api/experiments.py`), strictly excluded failed trials (`succeeded=False`) from candidate selection, returning `None` instead of presenting failed trials as the best model.
+  6. **OOF Optimal Trial Selection (P1)**: In `oof_submission.py`, candidate model parameter freezing now sorts trials by score according to metric optimization direction (`greater_is_better`), picking the true best trial instead of arbitrarily taking the first one in the list.
+  7. **Web Server Security Hardening (P1)**: In `src/automl/interfaces/web/server.py`, rejects negative `Content-Length` (< 0) with `400 Bad Request` to avoid unbounded socket reads / hangs. Restricted loopback CORS to match the server listening port, preventing cross-port local exploitation.
+  8. **Public Website CI Build (P2)**: Added independent `website-build` job to `.github/workflows/ci.yml` running `npm ci` and `npm run build` with TypeScript verification on `website/`.
+- **Validation**:
+  - New test suite `tests/test_audit_fixes.py` (8/8 passing).
+  - Updated `tests/test_oof_holdout_and_residuals.py` (3/3 passing).
+  - Full test suite: **987 passed**, 0 failures, 87.12% test coverage (above 85% requirement).
+  - Code hygiene: `ruff check` passed, gradual `mypy` passed (126 source files clean), `npm run lint:js` clean (0 warnings).
+
 ### Facade Slim & Quality Debt (P1) — Workspace Decomposition, Gradual Mypy, Zero ESLint Warnings & Feature Selection Benchmark (2026-10-23)
 
 - **Application (`workspace.py`, `dataset_service.py`, `run_service.py`, `experiment_service.py`, `experiment_planning_service.py`, `ensemble_service.py`)**:

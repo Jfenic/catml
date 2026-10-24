@@ -52,12 +52,11 @@ def _get_best_trial_result(trials: list[Any], metric: str | None = None, ws: Any
     if not trials:
         return None
     valid = [t for t in trials if getattr(t, "succeeded", False)]
-    candidate_pool = valid if valid else trials
-    if not candidate_pool:
+    if not valid:
         return None
-    target_metric = metric or getattr(candidate_pool[0], "primary_metric", None)
+    target_metric = metric or getattr(valid[0], "primary_metric", None)
     is_min = _is_metric_minimizing(target_metric, ws=ws)
-    return min(candidate_pool, key=lambda t: getattr(t, "primary_score", 0.0)) if is_min else max(candidate_pool, key=lambda t: getattr(t, "primary_score", 0.0))
+    return min(valid, key=lambda t: getattr(t, "primary_score", 0.0)) if is_min else max(valid, key=lambda t: getattr(t, "primary_score", 0.0))
 
 
 def _build_real_activity_feed(

@@ -22,8 +22,8 @@ from automl.interfaces.web.api._helpers import (  # noqa: F401 — public re-exp
 )
 
 
-def _is_loopback_origin(origin: str) -> bool:
-    """Return True when Origin is an http(s) loopback URL."""
+def _is_loopback_origin(origin: str, expected_port: int | None = None) -> bool:
+    """Return True when Origin is an http(s) loopback URL matching the expected server port."""
     try:
         parsed = urlparse(origin)
     except Exception:
@@ -31,7 +31,13 @@ def _is_loopback_origin(origin: str) -> bool:
     if parsed.scheme not in {"http", "https"}:
         return False
     host = (parsed.hostname or "").lower()
-    return host in {"localhost", "127.0.0.1", "::1"}
+    if host not in {"localhost", "127.0.0.1", "::1"}:
+        return False
+    if expected_port is not None:
+        origin_port = parsed.port if parsed.port is not None else (443 if parsed.scheme == "https" else 80)
+        if origin_port != expected_port:
+            return False
+    return True
 
 
 class AutoMLWebHandler(BaseHTTPRequestHandler):
@@ -90,9 +96,14 @@ class AutoMLWebHandler(BaseHTTPRequestHandler):
         )
         return False
 
+    def _get_server_port(self) -> int | None:
+        if hasattr(self, "server") and self.server is not None and hasattr(self.server, "server_port"):
+            return getattr(self.server, "server_port", None)
+        return None
+
     def _send_cors_headers(self) -> None:
         origin = self.headers.get("Origin") if hasattr(self, "headers") and self.headers else None
-        if origin and _is_loopback_origin(origin):
+        if origin and _is_loopback_origin(origin, expected_port=self._get_server_port()):
             self.send_header("Access-Control-Allow-Origin", origin)
             self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
             self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
@@ -133,7 +144,8 @@ class AutoMLWebHandler(BaseHTTPRequestHandler):
         if origin:
             host = (headers.get("Host") or "").strip().lower()
             origin_host = (urlparse(origin).netloc or "").lower()
-            if not (_is_loopback_origin(origin) or (host and origin_host == host)):
+            allowed_origin = _is_loopback_origin(origin, expected_port=self._get_server_port())
+            if not (allowed_origin or (host and origin_host == host)):
                 self._send_json(
                     {
                         "error": "Forbidden",
@@ -241,17 +253,34 @@ class AutoMLWebHandler(BaseHTTPRequestHandler):
         path = parsed.path
 
         try:
-            content_length = int(self.headers.get("Content-Length", 0))
-            if content_length > self.MAX_PAYLOAD_SIZE:
-                self._send_json(
-                    {
-                        "error": "Payload Too Large",
-                        "message": f"Request size exceeds limit of {self.MAX_PAYLOAD_SIZE // (1024 * 1024)}MB",
-                    },
-                    HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
-                )
-                return
-            body = self.rfile.read(content_length)
+            raw_len = self.headers.get("Content-Length", 0) if hasattr(self, "headers") and self.headers else 0
+            content_length = int(raw_len)
+        except (ValueError, TypeError):
+            self._send_json(
+                {"error": "Bad Request", "message": "Invalid Content-Length header"},
+                HTTPStatus.BAD_REQUEST,
+            )
+            return
+
+        if content_length < 0:
+            self._send_json(
+                {"error": "Bad Request", "message": "Content-Length cannot be negative"},
+                HTTPStatus.BAD_REQUEST,
+            )
+            return
+
+        if content_length > self.MAX_PAYLOAD_SIZE:
+            self._send_json(
+                {
+                    "error": "Payload Too Large",
+                    "message": f"Request size exceeds limit of {self.MAX_PAYLOAD_SIZE // (1024 * 1024)}MB",
+                },
+                HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+            )
+            return
+
+        try:
+            body = self.rfile.read(content_length) if content_length > 0 else b""
             if len(body) > self.MAX_PAYLOAD_SIZE:
                 self._send_json(
                     {

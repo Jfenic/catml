@@ -81,8 +81,22 @@ Fuente del estado operativo y del backlog. Las guías y los planes enlazan aquí
 | P1 | **Provenance**: trial/run metadata (seeds, CV fold ids, content hash) on export/leaderboard | Done |
 | P1 | **Facade slim**: deeper `workspace.py` decomposition (más servicios; menos God-object) | Done |
 | P1 | **Quality debt**: application mypy gradual; ESLint warnings cleanup; `feature_selection_v05` bench | Done |
+| P0 | **External Audit (Security, Validation & CI)**: 8-point audit fixes (CI vars, Group OOF leakage, Holdout overlap, Promotion gates, Failed trial exclusion, OOF metric direction, HTTP security, Website CI build) | Done |
 | P2 | Stable PyPI **`0.9.0`** when robustness gates agreed | Open (rc1 already shipped) |
 | P2 | Workbench Labs Phase 1 | **Deferred** |
+
+### Track External Audit — Security, Reliability & Validation Integrity
+
+| Priority | Item | Status |
+| --- | --- | --- |
+| P0 | **GitHub Actions CI Workflow**: Sustituido contexto inválido `env` por `vars.CATML_AUDIT_STRICT` en `continue-on-error`. | Done |
+| P0 | **OOF Group Data Leakage**: Soporte para `StratifiedGroupKFold` / `GroupKFold` en `evaluate_oof` y `ensemble_service` con verificación de solapamiento cero entre grupos de train y validación. | Done |
+| P0 | **Holdout Validation Integrity**: Rechazo estricto de rutas idénticas, hashes de archivo idénticos, solapamiento de filas y solapamiento de grupos entre train y holdout. | Done |
+| P1 | **Validación de Promoción**: Validación de `min_improvement >= 0` finito y exigencia de mejora positiva real (`holdout_delta > 0.0 and holdout_delta > min_improvement`). | Done |
+| P1 | **Veracidad del Mejor Trial**: Exclusión estricta de trials fallidos en `_get_best_trial_result` y `/api/experiments/compare` devolviendo `None` si todos fallaron. | Done |
+| P1 | **Selección Óptima en OOF**: Selección de parámetros del trial óptimo según la métrica y su dirección de optimización (`greater_is_better`). | Done |
+| P1 | **Seguridad Web & CORS**: Rechazo de `Content-Length < 0` con `400 Bad Request` y restricción de CORS loopback al puerto del Workbench. | Done |
+| P2 | **CI Build del Sitio Web**: Añadido job independiente `website-build` en CI (`npm ci` y `npm run build` con verificación de TypeScript). | Done |
 
 ### Shipped — structure / trust / studies / rc1 (reference)
 

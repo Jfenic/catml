@@ -108,21 +108,24 @@ def test_evaluate_oof_without_holdout_defaults(sample_binary_data):
 def test_oof_submission_candidate_promotion_gate(tmp_path: Path):
     ws, cmd, qry = build_application(root_dir=str(tmp_path / "ws"))
 
-    # Create synthetic train, test, and holdout datasets
-    rng = np.random.default_rng(0)
-    n = 120
+    # Create synthetic train, test, and holdout datasets with non-linear circular boundary
+    rng = np.random.default_rng(42)
+    n = 200
+    x1 = rng.normal(size=n)
+    x2 = rng.normal(size=n)
     df = pd.DataFrame({
-        "x1": rng.normal(size=n),
-        "x2": rng.normal(size=n) * 2,
-        "target": (rng.normal(size=n) > 0).astype(int),
+        "x1": x1,
+        "x2": x2,
+        "target": ((x1**2 + x2**2) > 1.2).astype(int),
     })
     train_path = tmp_path / "train.csv"
     test_path = tmp_path / "test.csv"
     holdout_path = tmp_path / "holdout.csv"
 
-    df.iloc[:80].to_csv(train_path, index=False)
-    df.iloc[80:100].drop(columns=["target"]).to_csv(test_path, index=False)
-    df.iloc[100:].to_csv(holdout_path, index=False)
+    df.iloc[:120].to_csv(train_path, index=False)
+    df.iloc[120:140].drop(columns=["target"]).to_csv(test_path, index=False)
+    # Ensure holdout has disjoint rows from train
+    df.iloc[140:].to_csv(holdout_path, index=False)
 
     ds = ws.register_dataset(name="synth", path=train_path, target="target", task_type="binary_classification")
     run = ws.create_run(ds, metric="roc_auc")
@@ -148,7 +151,20 @@ def test_oof_submission_candidate_promotion_gate(tmp_path: Path):
     assert report_1["promoted"] is False
     assert "not independent holdout evidence" in report_1["evaluation"]
 
-    # 2. Run with holdout dataset and negative min_improvement -> promoted
+    # 2a. Negative min_improvement must be rejected
+    with pytest.raises(ValueError, match="min_improvement must be a non-negative finite float"):
+        cmd.dispatch(GenerateOOFSubmissionCommand(
+            run_id=run.id,
+            test_dataset_path=str(test_path),
+            output_path=str(tmp_path / "sub_invalid.csv"),
+            experiment_id=source_exp.id,
+            folds=3,
+            method="average",
+            holdout_dataset_path=str(holdout_path),
+            min_improvement=-1.0,
+        ))
+
+    # 2b. Run with holdout dataset and legitimate non-negative min_improvement -> promoted
     out_path_2 = tmp_path / "sub_holdout.csv"
     exp_id_2 = cmd.dispatch(GenerateOOFSubmissionCommand(
         run_id=run.id,
@@ -158,15 +174,16 @@ def test_oof_submission_candidate_promotion_gate(tmp_path: Path):
         folds=3,
         method="average",
         holdout_dataset_path=str(holdout_path),
-        min_improvement=-1.0,  # Any delta promotes
+        min_improvement=0.01,
     ))
     report_2 = qry.dispatch(GetOOFResultQuery(run_id=run.id, experiment_id=exp_id_2))
     assert report_2["promoted"] is True
     assert report_2["holdout_score"] is not None
     assert report_2["holdout_delta"] is not None
+    assert report_2["holdout_delta"] > 0.01
     assert "promoted candidate" in report_2["evaluation"]
 
-    # 3. Run with holdout ratio
+    # 3. Run with holdout ratio and unattainable threshold -> not promoted
     out_path_3 = tmp_path / "sub_ratio.csv"
     exp_id_3 = cmd.dispatch(GenerateOOFSubmissionCommand(
         run_id=run.id,
@@ -177,7 +194,7 @@ def test_oof_submission_candidate_promotion_gate(tmp_path: Path):
         method="stacked",
         meta_model="ridge",
         holdout_ratio=0.2,
-        min_improvement=0.5,  # Unattainable threshold -> not promoted
+        min_improvement=0.99,  # Unattainable threshold -> not promoted
     ))
     report_3 = qry.dispatch(GetOOFResultQuery(run_id=run.id, experiment_id=exp_id_3))
     assert report_3["promoted"] is False

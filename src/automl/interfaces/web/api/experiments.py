@@ -348,10 +348,9 @@ def try_get(handler: Any, path: str, query_params: dict, ws: Any, cmd: Any, qry:
             for item in comparison:
                 trs = item.get("trials", [])
                 valid_trs = [t for t in trs if not t.get("failed", False)]
-                pool = valid_trs if valid_trs else trs
-                met = pool[0].get("metric") if pool else None
+                met = valid_trs[0].get("metric") if valid_trs else (trs[0].get("metric") if trs else None)
                 is_min = _is_metric_minimizing(met, ws=ws)
-                best_t = (min(pool, key=lambda x: x.get("score", 0.0)) if is_min else max(pool, key=lambda x: x.get("score", 0.0))) if pool else None
+                best_t = (min(valid_trs, key=lambda x: x.get("score", 0.0)) if is_min else max(valid_trs, key=lambda x: x.get("score", 0.0))) if valid_trs else None
                 item["best_score"] = best_t.get("score") if best_t else None
                 item["best_model"] = best_t.get("model_id") if best_t else None
                 item["metric"] = met

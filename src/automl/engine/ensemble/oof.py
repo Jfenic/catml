@@ -7,7 +7,7 @@ from typing import Any, Callable
 import numpy as np
 import pandas as pd
 from sklearn.metrics import roc_auc_score
-from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import GroupKFold, StratifiedGroupKFold, StratifiedKFold
 from sklearn.preprocessing import LabelEncoder
 
 from automl.engine.ensemble.blender import (
@@ -53,6 +53,7 @@ def evaluate_oof(
     progress: Callable[[int, int, str], None] | None = None,
     X_holdout: pd.DataFrame | None = None,
     y_holdout: pd.Series | None = None,
+    groups: pd.Series | np.ndarray | None = None,
 ) -> OOFResult:
     if isinstance(folds, bool) or not isinstance(folds, int) or folds < 2:
         raise ValueError("folds must be an integer >= 2")
@@ -107,7 +108,22 @@ def evaluate_oof(
     fold_scores["oof_blend"] = []
     backends, parameters = {}, {}
     fold_ids = np.full(len(X), -1, dtype=int)
-    splitter = StratifiedKFold(n_splits=folds, shuffle=True, random_state=seed)
+    groups_arr = None
+    if groups is not None:
+        groups_arr = np.asarray(groups)
+        if len(groups_arr) != len(X):
+            raise ValueError(f"groups length ({len(groups_arr)}) must match features length ({len(X)})")
+        if pd.isna(pd.Series(groups_arr)).any():
+            raise ValueError("groups must not contain missing values")
+        n_groups = len(np.unique(groups_arr))
+        if n_groups < folds:
+            raise ValueError(f"Number of distinct groups ({n_groups}) must be >= folds ({folds})")
+        try:
+            splitter = StratifiedGroupKFold(n_splits=folds, shuffle=True, random_state=seed)
+        except Exception:
+            splitter = GroupKFold(n_splits=folds)
+    else:
+        splitter = StratifiedKFold(n_splits=folds, shuffle=True, random_state=seed)
 
     def check_budget() -> None:
         if check_allowed:
@@ -129,7 +145,16 @@ def evaluate_oof(
     completed = 0
     if progress:
         progress(0, folds * len(factories), "Evaluating OOF folds")
-    for fold, (train_idx, valid_idx) in enumerate(splitter.split(X, target)):
+    split_iter = splitter.split(X, target, groups=groups_arr) if groups_arr is not None else splitter.split(X, target)
+    for fold, (train_idx, valid_idx) in enumerate(split_iter):
+        if groups_arr is not None:
+            train_g = set(groups_arr[train_idx])
+            val_g = set(groups_arr[valid_idx])
+            overlap = train_g.intersection(val_g)
+            if overlap:
+                raise ValueError(
+                    f"Group leakage detected in fold {fold}: {len(overlap)} groups shared between train and validation: {overlap}"
+                )
         fold_ids[valid_idx] = fold
         for name, factory in factories.items():
             check_budget()

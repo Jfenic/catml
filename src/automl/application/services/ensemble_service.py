@@ -99,6 +99,8 @@ class EnsembleService:
             from automl.engine.ensemble.oof import evaluate_oof
 
             test_slice = X.iloc[:min(len(X), 10)].copy()
+            group_col = getattr(run.config, "group_column", None)
+            groups = df[group_col].values if (group_col and group_col in df.columns) else None
             oof_res = evaluate_oof(
                 X=X,
                 y=y,
@@ -108,6 +110,7 @@ class EnsembleService:
                 seed=run.config.random_seed,
                 method=method_norm,
                 meta_model=meta_model,
+                groups=groups,
             )
             best_score = float(oof_res.scores["oof_blend"])
             model_scores = oof_res.scores
