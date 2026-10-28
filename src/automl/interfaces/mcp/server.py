@@ -480,6 +480,75 @@ def create_mcp_server(
                 is_error=True,
             )
 
+    @server.tool(
+        name="optimize_experiment",
+        description="Run Bayesian hyperparameter optimization (Optuna) for an experiment candidate within budget limits.",
+    )
+    def optimize_experiment(
+        run_id: str,
+        experiment_id: str,
+        n_trials: int = 10,
+        optimizer: str = "optuna",
+        idempotency_key: str | None = None,
+        approval_id: str | None = None,
+    ) -> types.CallToolResult:
+        try:
+            arguments: dict[str, Any] = {
+                "run_id": run_id,
+                "experiment_id": experiment_id,
+                "n_trials": n_trials,
+                "optimizer": optimizer,
+            }
+            inv = ToolInvocation(
+                tool_name="optimize_experiment",
+                arguments=arguments,
+                context=ToolCallContext(
+                    actor="mcp_agent",
+                    workspace_path=ws_path,
+                    run_id=run_id,
+                    correlation_id=f"mcp-{uuid.uuid4().hex[:8]}",
+                    permission=AgentPermission.EXECUTE_WITHIN_BUDGET,
+                    approval_id=approval_id,
+                ),
+                idempotency_key=idempotency_key,
+                approval_id=approval_id,
+            )
+            res = executor.execute(inv)
+            if res.success:
+                return types.CallToolResult(
+                    content=[types.TextContent(type="text", text=json.dumps(res.data, default=str, indent=2))],
+                    is_error=False,
+                )
+            if res.error and res.error.code == ToolErrorCode.APPROVAL_REQUIRED:
+                return types.CallToolResult(
+                    content=[
+                        types.TextContent(
+                            type="text",
+                            text=json.dumps(
+                                {
+                                    "status": "PENDING_APPROVAL",
+                                    "approval_id": res.approval_id,
+                                    "message": f"Action 'optimize_experiment' requires human approval. Run: automl agent approve {res.approval_id}",
+                                    "details": res.error.details,
+                                },
+                                indent=2,
+                            ),
+                        )
+                    ],
+                    is_error=False,
+                )
+            err_msg = res.error.message if res.error else "Unknown error"
+            err_code = res.error.code.value if res.error else ToolErrorCode.INTERNAL_ERROR.value
+            return types.CallToolResult(
+                content=[types.TextContent(type="text", text=f"[{err_code}] {err_msg}")],
+                is_error=True,
+            )
+        except Exception as e:
+            return types.CallToolResult(
+                content=[types.TextContent(type="text", text=f"[{ToolErrorCode.INTERNAL_ERROR.value}] {str(e)}")],
+                is_error=True,
+            )
+
     # -----------------------------------------------------------------------
     # Operations Inspection & Control Tools (Milestone H3)
     # -----------------------------------------------------------------------
@@ -566,6 +635,26 @@ def create_mcp_server(
                 status=target_status,
                 error_message=error_msg,
             )
+
+            # Real process & run cancellation when workspace is available
+            if workspace and op.run_id:
+                try:
+                    workspace.cancel_run(op.run_id)
+                except Exception:
+                    pass
+                if hasattr(workspace, "jobs") and workspace.jobs:
+                    try:
+                        from automl.application.commands.job_commands import ControlJobCommand
+                        active_jobs = []
+                        if hasattr(workspace.jobs, "list"):
+                            active_jobs = workspace.jobs.list(op.run_id)
+                        for j in active_jobs:
+                            jid = j.get("id") if isinstance(j, dict) else getattr(j, "id", None)
+                            if jid:
+                                workspace.jobs.control(ControlJobCommand(job_id=jid, action="cancel"))
+                    except Exception:
+                        pass
+
             return types.CallToolResult(
                 content=[
                     types.TextContent(

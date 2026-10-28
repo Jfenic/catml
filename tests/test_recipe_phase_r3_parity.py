@@ -278,7 +278,12 @@ def test_recipe_mcp_surface(recipe_env):
     evidence = recipe_env["evidence"]
     dataset = recipe_env["dataset"]
 
-    server = create_mcp_server(workspace=ws, command_bus=cmd_bus, query_bus=qry_bus)
+    server = create_mcp_server(
+        workspace=ws,
+        command_bus=cmd_bus,
+        query_bus=qry_bus,
+        require_approval_for_mutations=False,
+    )
 
     # Verify tool listing includes all 8 recipe tools
     tools = asyncio.run(server.list_tools())
@@ -502,7 +507,12 @@ def test_recipe_cross_surface_full_parity(running_web_server, capsys):
 
     # --- Step 3: MCP Read ---
     if HAS_MCP:
-        server = create_mcp_server(workspace=ws, command_bus=cmd_bus, query_bus=qry_bus)
+        server = create_mcp_server(
+        workspace=ws,
+        command_bus=cmd_bus,
+        query_bus=qry_bus,
+        require_approval_for_mutations=False,
+    )
         mcp_res = asyncio.run(server.call_tool("recipe_get", {"recipe_id": recipe_id}))
         assert mcp_res.is_error is False
         mcp_recipe = json.loads(mcp_res.content[0].text)

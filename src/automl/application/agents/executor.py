@@ -6,7 +6,7 @@ import logging
 import time
 import uuid
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from automl.application.agents.contracts import (
@@ -67,11 +67,13 @@ class ToolExecutor:
         policy_evaluator: PolicyEvaluator | None = None,
         ledger: AgentLedgerPort | None = None,
         default_budget: AgentBudget | None = None,
+        approval_ttl_seconds: float = 86400.0,
     ):
         self.registry = registry
         self.policy_evaluator = policy_evaluator or PolicyEvaluator()
         self.ledger = ledger
         self.default_budget = default_budget or AgentBudget()
+        self.approval_ttl_seconds = float(approval_ttl_seconds)
 
     def execute(
         self,
@@ -286,7 +288,49 @@ class ToolExecutor:
                     ),
                     execution_time_seconds=time.perf_counter() - start_time,
                 )
+            elif approval_record.status == ApprovalStatus.EXPIRED:
+                return ToolResult(
+                    request_id=req_id,
+                    tool_name=invocation.tool_name,
+                    success=False,
+                    approval_id=approval_id,
+                    error=ToolError(
+                        code=ToolErrorCode.PERMISSION_DENIED,
+                        message=f"Approval request '{approval_id}' has expired",
+                        details={"approval_id": approval_id, "status": "expired"},
+                        correlation_id=invocation.context.correlation_id,
+                    ),
+                    execution_time_seconds=time.perf_counter() - start_time,
+                )
             elif approval_record.status == ApprovalStatus.APPROVED:
+                # Expiration check: verify approval has not elapsed TTL
+                if approval_record.expires_at:
+                    try:
+                        exp_dt = datetime.fromisoformat(approval_record.expires_at.replace("Z", "+00:00"))
+                        if datetime.now(timezone.utc) > exp_dt:
+                            if self.ledger:
+                                self.ledger.update_approval_status(
+                                    approval_id=approval_id,
+                                    status=ApprovalStatus.EXPIRED,
+                                    reviewer=approval_record.reviewer,
+                                    reason="Approval request has expired",
+                                )
+                            return ToolResult(
+                                request_id=req_id,
+                                tool_name=invocation.tool_name,
+                                success=False,
+                                approval_id=approval_id,
+                                error=ToolError(
+                                    code=ToolErrorCode.PERMISSION_DENIED,
+                                    message=f"Approval request '{approval_id}' has expired",
+                                    details={"approval_id": approval_id, "status": "expired"},
+                                    correlation_id=invocation.context.correlation_id,
+                                ),
+                                execution_time_seconds=time.perf_counter() - start_time,
+                            )
+                    except Exception:
+                        pass
+
                 # Anti-tampering check: verify that arguments match approved payload
                 expected_hash = compute_arguments_hash(
                     action=invocation.tool_name,
@@ -329,6 +373,7 @@ class ToolExecutor:
                 max_tokens=active_budget.max_tokens,
                 consumed_experiments=active_budget.consumed_experiments + active_reserved.get("experiments", 0),
                 consumed_trials=active_budget.consumed_trials + active_reserved.get("trials", 0),
+                consumed_folds=active_budget.consumed_folds + active_reserved.get("folds", 0),
                 consumed_duration_seconds=active_budget.consumed_duration_seconds + active_reserved.get("duration_seconds", 0.0),
                 consumed_llm_calls=active_budget.consumed_llm_calls + active_reserved.get("llm_calls", 0),
                 consumed_tokens=active_budget.consumed_tokens + active_reserved.get("tokens", 0),
@@ -375,6 +420,8 @@ class ToolExecutor:
             )
             appr_id = f"appr-{arg_hash[:16]}"
             if self.ledger:
+                now_utc = datetime.now(timezone.utc)
+                expires_at_iso = (now_utc + timedelta(seconds=self.approval_ttl_seconds)).strftime("%Y-%m-%dT%H:%M:%SZ")
                 approval_req = ApprovalRequest(
                     approval_id=appr_id,
                     action=invocation.tool_name,
@@ -384,7 +431,7 @@ class ToolExecutor:
                     arguments=invocation.arguments,
                     policy_version=decision.policy_version,
                     max_cost=cost_estimate,
-                    expires_at="2099-12-31T23:59:59Z",
+                    expires_at=expires_at_iso,
                     status=ApprovalStatus.PENDING,
                 )
                 self.ledger.save_approval(approval_req)
@@ -1219,6 +1266,26 @@ def create_full_tool_registry(
             target_status = OperationStatus.CANCELLED if force else OperationStatus.CANCEL_REQUESTED
             error_msg = f"Cancellation requested: {reason}" if reason else "Cancellation requested"
             resolved = ledger.update_operation_status(operation_id, target_status, error_message=error_msg)
+
+            # Real process & run cancellation when workspace is available
+            if workspace and op.run_id:
+                try:
+                    workspace.cancel_run(op.run_id)
+                except Exception:
+                    pass
+                if hasattr(workspace, "jobs") and workspace.jobs:
+                    try:
+                        from automl.application.commands.job_commands import ControlJobCommand
+                        active_jobs = []
+                        if hasattr(workspace.jobs, "list"):
+                            active_jobs = workspace.jobs.list(op.run_id)
+                        for j in active_jobs:
+                            jid = j.get("id") if isinstance(j, dict) else getattr(j, "id", None)
+                            if jid:
+                                workspace.jobs.control(ControlJobCommand(job_id=jid, action="cancel"))
+                    except Exception:
+                        pass
+
             return {"operation_id": resolved.operation_id, "status": resolved.status.value}
 
         registry.register(
@@ -1271,6 +1338,314 @@ def create_full_tool_registry(
             output_schema=TOOL_SCHEMAS["optimize_experiment"]["output"],
         ),
         _handle_optimize_experiment,
+    )
+
+    # 15. analysis_create_study
+    def _handle_analysis_create_study(args: dict[str, Any], _ctx: ToolCallContext) -> dict[str, Any]:
+        from automl.application.analysis.commands import CreateStudyCommand
+        from automl.application.analysis.queries import GetStudyQuery
+
+        cmd = CreateStudyCommand(
+            dataset_id=args["dataset_id"],
+            name=args.get("name", ""),
+            target_column=args.get("target_column"),
+        )
+        study_res = command_bus.dispatch(cmd)
+        study_id = study_res if isinstance(study_res, str) else getattr(study_res, "id", str(study_res))
+        study = query_bus.dispatch(GetStudyQuery(study_id=study_id))
+        return study if isinstance(study, dict) else (study.to_dict() if hasattr(study, "to_dict") else dict(study))
+
+    registry.register(
+        ToolDefinition(
+            name="analysis_create_study",
+            version="1.0.0",
+            description="Create an exploratory study specification for a dataset",
+            effect=ToolEffect.PROPOSE,
+            permission_required=AgentPermission.EXECUTE_WITHIN_BUDGET,
+            cost_estimate={},
+            input_schema=TOOL_SCHEMAS["analysis_create_study"]["input"],
+            output_schema=TOOL_SCHEMAS["analysis_create_study"]["output"],
+        ),
+        _handle_analysis_create_study,
+    )
+
+    # 16. analysis_run_study
+    def _handle_analysis_run_study(args: dict[str, Any], _ctx: ToolCallContext) -> dict[str, Any]:
+        from automl.application.analysis.commands import RunAnalysisCommand
+        from automl.application.analysis.queries import GetAnalysisRunQuery, ListFindingsQuery
+
+        study_id = args["study_id"]
+        cmd = RunAnalysisCommand(study_id=study_id)
+        run_res = command_bus.dispatch(cmd)
+        run_id = run_res if isinstance(run_res, str) else getattr(run_res, "id", str(run_res))
+        run_data = query_bus.dispatch(GetAnalysisRunQuery(run_id=run_id))
+        findings = query_bus.dispatch(ListFindingsQuery(study_id=study_id, run_id=run_id))
+        return {
+            "study_id": study_id,
+            "run_id": run_id,
+            "run": run_data,
+            "findings_count": len(findings) if findings else 0,
+        }
+
+    registry.register(
+        ToolDefinition(
+            name="analysis_run_study",
+            version="1.0.0",
+            description="Execute deterministic statistical and exploratory analysis on an existing study",
+            effect=ToolEffect.PROPOSE,
+            permission_required=AgentPermission.EXECUTE_WITHIN_BUDGET,
+            cost_estimate={"duration_seconds": 15.0},
+            input_schema=TOOL_SCHEMAS["analysis_run_study"]["input"],
+            output_schema=TOOL_SCHEMAS["analysis_run_study"]["output"],
+        ),
+        _handle_analysis_run_study,
+    )
+
+    # 17. analysis_propose_experiment
+    def _handle_analysis_propose_experiment(args: dict[str, Any], _ctx: ToolCallContext) -> dict[str, Any]:
+        from automl.application.analysis.commands import CreateHypothesisCommand
+        from automl.application.analysis.queries import ListFindingsQuery
+
+        study_id = args["study_id"]
+        finding_id = args.get("finding_id", "")
+        desc = args.get("hypothesis_description") or args.get("description") or args.get("hypothesis", "")
+        action = args.get("proposed_action", "feature_engineering")
+        delta = args.get("transformation_spec") or args.get("experiment_delta") or {}
+
+        if finding_id:
+            findings = query_bus.dispatch(ListFindingsQuery(study_id=study_id))
+            target_finding = next((f for f in (findings or []) if getattr(f, "id", None) == finding_id or (isinstance(f, dict) and f.get("id") == finding_id)), None)
+            if not target_finding:
+                raise KeyError(f"Finding '{finding_id}' not found in study '{study_id}'.")
+
+        cmd = CreateHypothesisCommand(
+            study_id=study_id,
+            finding_id=finding_id,
+            description=desc,
+            proposed_action=action,
+            experiment_delta=delta,
+        )
+        hyp_id = command_bus.dispatch(cmd)
+        return {
+            "hypothesis_id": str(hyp_id),
+            "study_id": study_id,
+            "finding_id": finding_id,
+            "description": desc,
+            "proposed_action": action,
+            "status": "proposed",
+            "experiment_delta": delta,
+            "note": "Hypothesis recorded under 'Propose ≠ Accept' principle. Requires empirical validation trial before promotion.",
+        }
+
+    registry.register(
+        ToolDefinition(
+            name="analysis_propose_experiment",
+            version="1.0.0",
+            description="Propose an actionable machine learning experiment hypothesis derived from a statistical finding",
+            effect=ToolEffect.PROPOSE,
+            permission_required=AgentPermission.EXECUTE_WITHIN_BUDGET,
+            cost_estimate={},
+            input_schema=TOOL_SCHEMAS["analysis_propose_experiment"]["input"],
+            output_schema=TOOL_SCHEMAS["analysis_propose_experiment"]["output"],
+        ),
+        _handle_analysis_propose_experiment,
+    )
+
+    # 18. analysis_verify_hypothesis
+    def _handle_analysis_verify_hypothesis(args: dict[str, Any], _ctx: ToolCallContext) -> dict[str, Any]:
+        from automl.application.analysis.commands import VerifyHypothesisCommand
+
+        cmd = VerifyHypothesisCommand(
+            hypothesis_id=args["hypothesis_id"],
+            run_id=args.get("run_id"),
+            min_improvement=float(args.get("min_improvement", 0.0)),
+        )
+        link_data = command_bus.dispatch(cmd)
+        return link_data if isinstance(link_data, dict) else (link_data.to_dict() if hasattr(link_data, "to_dict") else dict(link_data))
+
+    registry.register(
+        ToolDefinition(
+            name="analysis_verify_hypothesis",
+            version="1.0.0",
+            description="Empirically verify a proposed hypothesis against AutoML baseline on identical validation split",
+            effect=ToolEffect.PROPOSE,
+            permission_required=AgentPermission.EXECUTE_WITHIN_BUDGET,
+            cost_estimate={"trials": 1, "duration_seconds": 30.0},
+            input_schema=TOOL_SCHEMAS["analysis_verify_hypothesis"]["input"],
+            output_schema=TOOL_SCHEMAS["analysis_verify_hypothesis"]["output"],
+        ),
+        _handle_analysis_verify_hypothesis,
+    )
+
+    # 19. recipe_create_from_evidence
+    def _handle_recipe_create_from_evidence(args: dict[str, Any], _ctx: ToolCallContext) -> dict[str, Any]:
+        from dataclasses import asdict, is_dataclass
+        from automl.application.recipes.commands import CreateExperimentRecipeFromEvidenceCommand
+        from automl.application.recipes.queries import GetExperimentRecipeQuery
+
+        cmd = CreateExperimentRecipeFromEvidenceCommand(
+            evidence_link_id=args["evidence_link_id"],
+            recipe_name=args.get("name"),
+            notes=args.get("description"),
+            model_ids=args.get("model_ids"),
+        )
+        recipe_id = command_bus.dispatch(cmd)
+        recipe = query_bus.dispatch(GetExperimentRecipeQuery(recipe_id=str(recipe_id)))
+        if recipe is None:
+            return {"recipe_id": str(recipe_id), "status": "draft"}
+        if isinstance(recipe, dict):
+            return recipe
+        if hasattr(recipe, "to_dict"):
+            return recipe.to_dict()
+        if is_dataclass(recipe):
+            return asdict(recipe)
+        return dict(recipe)
+
+    registry.register(
+        ToolDefinition(
+            name="recipe_create_from_evidence",
+            version="1.0.0",
+            description="Create a draft reproducible ExperimentRecipe from verified hypothesis evidence",
+            effect=ToolEffect.PROPOSE,
+            permission_required=AgentPermission.EXECUTE_WITHIN_BUDGET,
+            cost_estimate={},
+            input_schema=TOOL_SCHEMAS["recipe_create_from_evidence"]["input"],
+            output_schema=TOOL_SCHEMAS["recipe_create_from_evidence"]["output"],
+        ),
+        _handle_recipe_create_from_evidence,
+    )
+
+    # 20. recipe_select
+    def _handle_recipe_select(args: dict[str, Any], _ctx: ToolCallContext) -> dict[str, Any]:
+        from automl.application.recipes.commands import SelectExperimentRecipeCommand
+
+        recipe_id = args["recipe_id"]
+        cmd = SelectExperimentRecipeCommand(recipe_id=recipe_id, notes=args.get("notes"))
+        command_bus.dispatch(cmd)
+        return {"recipe_id": recipe_id, "status": "selected"}
+
+    registry.register(
+        ToolDefinition(
+            name="recipe_select",
+            version="1.0.0",
+            description="Explicitly select a recipe for trial/evaluation",
+            effect=ToolEffect.PROPOSE,
+            permission_required=AgentPermission.EXECUTE_WITHIN_BUDGET,
+            cost_estimate={},
+            input_schema=TOOL_SCHEMAS["recipe_select"]["input"],
+            output_schema=TOOL_SCHEMAS["recipe_select"]["output"],
+        ),
+        _handle_recipe_select,
+    )
+
+    # 21. recipe_submit
+    def _handle_recipe_submit(args: dict[str, Any], _ctx: ToolCallContext) -> dict[str, Any]:
+        from dataclasses import asdict, is_dataclass
+        from automl.application.recipes.commands import SubmitExperimentFromRecipeCommand
+        from automl.application.recipes.queries import GetExperimentRecipeQuery
+
+        recipe_id = args["recipe_id"]
+        cmd = SubmitExperimentFromRecipeCommand(
+            recipe_id=recipe_id,
+            run_id=args.get("run_id"),
+            model_ids=args.get("model_ids"),
+            notes=args.get("notes"),
+        )
+        exp_ids = command_bus.dispatch(cmd)
+        recipe = query_bus.dispatch(GetExperimentRecipeQuery(recipe_id=recipe_id))
+        rec_data = None
+        if recipe is not None:
+            if is_dataclass(recipe):
+                rec_data = asdict(recipe)
+            elif hasattr(recipe, "to_dict"):
+                rec_data = recipe.to_dict()
+            elif isinstance(recipe, dict):
+                rec_data = recipe
+        executed = [str(e) for e in (exp_ids if isinstance(exp_ids, list) else [exp_ids])]
+        return {
+            "status": "submitted",
+            "recipe_id": recipe_id,
+            "executed_experiments": executed,
+            "experiment_ids": executed,
+            "recipe": rec_data,
+        }
+
+    registry.register(
+        ToolDefinition(
+            name="recipe_submit",
+            version="1.0.0",
+            description="Submit and execute training experiments reproducing an experiment recipe configuration",
+            effect=ToolEffect.MUTATE,
+            permission_required=AgentPermission.EXECUTE_WITHIN_BUDGET,
+            cost_estimate={"experiments": 1, "trials": 2, "duration_seconds": 60.0},
+            input_schema=TOOL_SCHEMAS["recipe_submit"]["input"],
+            output_schema=TOOL_SCHEMAS["recipe_submit"]["output"],
+        ),
+        _handle_recipe_submit,
+    )
+
+    # 22. recipe_promote
+    def _handle_recipe_promote(args: dict[str, Any], _ctx: ToolCallContext) -> dict[str, Any]:
+        from dataclasses import asdict, is_dataclass
+        from automl.application.recipes.commands import PromoteExperimentRecipeCommand
+        from automl.application.recipes.queries import GetExperimentRecipeQuery
+
+        recipe_id = args["recipe_id"]
+        cmd = PromoteExperimentRecipeCommand(
+            recipe_id=recipe_id,
+            reason=args.get("reason"),
+            notes=args.get("notes"),
+        )
+        command_bus.dispatch(cmd)
+        recipe = query_bus.dispatch(GetExperimentRecipeQuery(recipe_id=recipe_id))
+        if recipe is not None:
+            if is_dataclass(recipe):
+                return asdict(recipe)
+            elif hasattr(recipe, "to_dict"):
+                return recipe.to_dict()
+            elif isinstance(recipe, dict):
+                return recipe
+        return {
+            "recipe_id": recipe_id,
+            "status": "promoted",
+            "promoted_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    registry.register(
+        ToolDefinition(
+            name="recipe_promote",
+            version="1.0.0",
+            description="Promote an experiment recipe as a reusable production candidate with audit reasoning",
+            effect=ToolEffect.MUTATE,
+            permission_required=AgentPermission.EXECUTE_WITHIN_BUDGET,
+            cost_estimate={},
+            input_schema=TOOL_SCHEMAS["recipe_promote"]["input"],
+            output_schema=TOOL_SCHEMAS["recipe_promote"]["output"],
+        ),
+        _handle_recipe_promote,
+    )
+
+    # 23. recipe_archive
+    def _handle_recipe_archive(args: dict[str, Any], _ctx: ToolCallContext) -> dict[str, Any]:
+        from automl.application.recipes.commands import ArchiveExperimentRecipeCommand
+
+        recipe_id = args["recipe_id"]
+        cmd = ArchiveExperimentRecipeCommand(recipe_id=recipe_id)
+        command_bus.dispatch(cmd)
+        return {"recipe_id": recipe_id, "status": "archived"}
+
+    registry.register(
+        ToolDefinition(
+            name="recipe_archive",
+            version="1.0.0",
+            description="Archive an experiment recipe",
+            effect=ToolEffect.MUTATE,
+            permission_required=AgentPermission.EXECUTE_WITHIN_BUDGET,
+            cost_estimate={},
+            input_schema=TOOL_SCHEMAS["recipe_archive"]["input"],
+            output_schema=TOOL_SCHEMAS["recipe_archive"]["output"],
+        ),
+        _handle_recipe_archive,
     )
 
     return registry

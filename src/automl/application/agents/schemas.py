@@ -290,6 +290,7 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
                 "run_id": {"type": "string"},
                 "experiment_id": {"type": "string"},
                 "n_trials": {"type": "integer", "minimum": 1, "maximum": 100},
+                "optimizer": {"type": "string"},
             },
             "required": ["run_id", "experiment_id"],
             "additionalProperties": False,
@@ -359,6 +360,179 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
                 "status": {"type": "string"},
             },
             "required": ["operation_id", "status"],
+        },
+    },
+    "analysis_create_study": {
+        "input": {
+            "type": "object",
+            "properties": {
+                "dataset_id": {"type": "string"},
+                "name": {"type": "string"},
+                "target_column": {"type": "string"},
+            },
+            "required": ["dataset_id"],
+        },
+        "output": {
+            "type": "object",
+            "properties": {
+                "id": {"type": "string"},
+                "name": {"type": "string"},
+                "dataset_id": {"type": "string"},
+            },
+            "required": ["id"],
+        },
+    },
+    "analysis_run_study": {
+        "input": {
+            "type": "object",
+            "properties": {
+                "study_id": {"type": "string"},
+            },
+            "required": ["study_id"],
+        },
+        "output": {
+            "type": "object",
+            "properties": {
+                "study_id": {"type": "string"},
+                "run_id": {"type": "string"},
+                "findings_count": {"type": "integer"},
+            },
+            "required": ["study_id", "run_id"],
+        },
+    },
+    "analysis_propose_experiment": {
+        "input": {
+            "type": "object",
+            "properties": {
+                "study_id": {"type": "string"},
+                "finding_id": {"type": "string"},
+                "hypothesis_description": {"type": "string"},
+                "description": {"type": "string"},
+                "hypothesis": {"type": "string"},
+                "proposed_action": {"type": "string"},
+                "transformation_spec": {"type": "object"},
+                "experiment_delta": {"type": "object"},
+            },
+            "required": ["study_id"],
+        },
+        "output": {
+            "type": "object",
+            "properties": {
+                "hypothesis_id": {"type": "string"},
+                "study_id": {"type": "string"},
+            },
+            "required": ["hypothesis_id"],
+        },
+    },
+    "analysis_verify_hypothesis": {
+        "input": {
+            "type": "object",
+            "properties": {
+                "hypothesis_id": {"type": "string"},
+                "run_id": {"type": "string"},
+                "min_improvement": {"type": "number"},
+            },
+            "required": ["hypothesis_id"],
+        },
+        "output": {
+            "type": "object",
+            "properties": {
+                "evidence_link_id": {"type": "string"},
+                "hypothesis_id": {"type": "string"},
+                "status": {"type": "string"},
+            },
+        },
+    },
+    "recipe_create_from_evidence": {
+        "input": {
+            "type": "object",
+            "properties": {
+                "evidence_link_id": {"type": "string"},
+                "name": {"type": "string"},
+                "description": {"type": "string"},
+                "model_ids": {"type": "array", "items": {"type": "string"}},
+            },
+            "required": ["evidence_link_id"],
+        },
+        "output": {
+            "type": "object",
+            "properties": {
+                "recipe_id": {"type": "string"},
+            },
+            "required": ["recipe_id"],
+        },
+    },
+    "recipe_select": {
+        "input": {
+            "type": "object",
+            "properties": {
+                "recipe_id": {"type": "string"},
+                "notes": {"type": "string"},
+            },
+            "required": ["recipe_id"],
+        },
+        "output": {
+            "type": "object",
+            "properties": {
+                "recipe_id": {"type": "string"},
+                "status": {"type": "string"},
+            },
+            "required": ["recipe_id"],
+        },
+    },
+    "recipe_submit": {
+        "input": {
+            "type": "object",
+            "properties": {
+                "recipe_id": {"type": "string"},
+                "run_id": {"type": "string"},
+                "model_ids": {"type": "array", "items": {"type": "string"}},
+                "notes": {"type": "string"},
+            },
+            "required": ["recipe_id"],
+        },
+        "output": {
+            "type": "object",
+            "properties": {
+                "experiment_ids": {"type": "array"},
+            },
+            "required": ["experiment_ids"],
+        },
+    },
+    "recipe_promote": {
+        "input": {
+            "type": "object",
+            "properties": {
+                "recipe_id": {"type": "string"},
+                "reason": {"type": "string"},
+                "notes": {"type": "string"},
+            },
+            "required": ["recipe_id"],
+        },
+        "output": {
+            "type": "object",
+            "properties": {
+                "recipe_id": {"type": "string"},
+                "status": {"type": "string"},
+            },
+            "required": ["recipe_id"],
+        },
+    },
+    "recipe_archive": {
+        "input": {
+            "type": "object",
+            "properties": {
+                "recipe_id": {"type": "string"},
+            },
+            "required": ["recipe_id"],
+        },
+        "output": {
+            "type": "object",
+            "properties": {
+                "recipe_id": {"type": "string"},
+                "status": {"type": "string"},
+            },
+            "required": ["recipe_id"],
         },
     },
 }

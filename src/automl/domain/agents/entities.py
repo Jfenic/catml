@@ -101,6 +101,7 @@ class AgentBudget:
     max_tokens: int = 100_000
     consumed_experiments: int = 0
     consumed_trials: int = 0
+    consumed_folds: int = 0
     consumed_duration_seconds: float = 0.0
     consumed_llm_calls: int = 0
     consumed_tokens: int = 0
@@ -110,6 +111,9 @@ class AgentBudget:
 
     def remaining_trials(self) -> int:
         return max(0, self.max_trials - self.consumed_trials)
+
+    def remaining_folds(self) -> int:
+        return max(0, self.max_folds - self.consumed_folds)
 
     def remaining_duration_seconds(self) -> float:
         return max(0.0, self.max_duration_seconds - self.consumed_duration_seconds)
@@ -124,6 +128,7 @@ class AgentBudget:
         """Check if an estimated cost can be afforded within remaining budget."""
         req_exp = cost.get("experiments", 0)
         req_trials = cost.get("trials", 0)
+        req_folds = cost.get("folds", 0)
         req_duration = cost.get("duration_seconds", 0.0)
         req_calls = cost.get("llm_calls", 0)
         req_tokens = cost.get("tokens", 0)
@@ -132,6 +137,8 @@ class AgentBudget:
             return False, f"Experiment budget exceeded: requires {req_exp}, remaining {self.remaining_experiments()}"
         if self.consumed_trials + req_trials > self.max_trials:
             return False, f"Trial budget exceeded: requires {req_trials}, remaining {self.remaining_trials()}"
+        if self.consumed_folds + req_folds > self.max_folds:
+            return False, f"Fold budget exceeded: requires {req_folds}, remaining {self.remaining_folds()}"
         if self.consumed_duration_seconds + req_duration > self.max_duration_seconds:
             return False, f"Duration budget exceeded: requires {req_duration}s, remaining {self.remaining_duration_seconds()}s"
         if self.consumed_llm_calls + req_calls > self.max_llm_calls:
@@ -145,6 +152,7 @@ class AgentBudget:
         """Record consumed resources."""
         self.consumed_experiments += cost.get("experiments", 0)
         self.consumed_trials += cost.get("trials", 0)
+        self.consumed_folds += cost.get("folds", 0)
         self.consumed_duration_seconds += float(cost.get("duration_seconds", 0.0))
         self.consumed_llm_calls += cost.get("llm_calls", 0)
         self.consumed_tokens += cost.get("tokens", 0)

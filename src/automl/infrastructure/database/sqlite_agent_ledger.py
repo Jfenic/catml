@@ -439,6 +439,7 @@ class SqliteAgentLedger(AgentLedgerPort):
             totals: dict[str, Any] = {
                 "experiments": 0,
                 "trials": 0,
+                "folds": 0,
                 "duration_seconds": 0.0,
                 "llm_calls": 0,
                 "tokens": 0,

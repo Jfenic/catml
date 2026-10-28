@@ -2,6 +2,27 @@
 
 Fuente del estado operativo y del backlog. Las guías y los planes enlazan aquí; no mantienen una segunda lista de tareas. Las fases V0.x son hitos de diseño; la versión del paquete se define en `src/automl/__init__.py`.
 
+### Track P0 — Auditoría Externa de Gobernanza de Agentes (2026-10-28)
+
+- [x] **Unificación de Gobernanza MCP en `ToolExecutor` (P0)**:
+  - Todas las operaciones MCP de análisis (`analysis_create_study`, `analysis_run_study`, `analysis_propose_experiment`, `analysis_verify_hypothesis`) y recetas (`recipe_create_from_evidence`, `recipe_select`, `recipe_submit`, `recipe_promote`, `recipe_archive`) ahora se enrutan a través del `ToolExecutor` gobernado (`_execute_or_dispatch`).
+  - Cumple estrictamente la regla de oro: *"Un LLM puede proponer libremente (`ToolEffect.PROPOSE`), pero solo puede modificar, ejecutar o promocionar (`ToolEffect.MUTATE`) aquello para lo que tiene autorización verificable"*.
+- [x] **Expiración Dinámica de Aprobaciones con TTL (P0)**:
+  - Eliminada la caducidad fija en el año 2099 en `ToolExecutor`.
+  - Añadido `approval_ttl_seconds` configurable (por defecto 86400s / 24h) con cálculo dinámico en UTC.
+  - Comprobación y transición automática a `ApprovalStatus.EXPIRED` en el ledger ante solicitudes vencidas, denegando la ejecución con `ToolErrorCode.PERMISSION_DENIED`.
+- [x] **Contabilización y Límites de Folds en `AgentBudget` (P0)**:
+  - Añadidos `consumed_folds` y `remaining_folds()` en `AgentBudget`.
+  - `AgentBudget.can_afford()` valida explícitamente el límite de folds (`cost["folds"]`) impidiendo sobreasignación presupuestaria.
+  - `sqlite_agent_ledger` inicializa y calcula acumulados de folds activos.
+- [x] **Cancelación Real de Ejecuciones y Procesos Trabajadores (P0)**:
+  - `cancel_operation` ahora invoca `workspace.cancel_run(op.run_id)` y emite comandos `ControlJobCommand(job_id, action="cancel")` a `workspace.jobs`, asegurando la interrupción efectiva de procesos trabajadores y liberación de recursos sin fugas CQRS.
+- [x] **Exposición de `optimize_experiment` en el Servidor MCP (P0)**:
+  - Publicada la herramienta `@server.tool(name="optimize_experiment")` en el catálogo MCP principal, gobernada por `ToolExecutor` y con esquema de parámetros validado.
+- [x] **Suite de Verificación y Pruebas Automatizadas (P0)**:
+  - Nueva suite `tests/test_audit_p0_agent_governance.py` con 7/7 tests pasando.
+  - Actualizadas suites de paridad y compatibilidad MCP y recetas.
+
 ### Track Landing — Public homepage (independent of Workbench)
 
 - [x] Aplicar CATML_monetizacion_privada.patch para retirar la estrategia comercial de la documentación y web públicas.

@@ -1,6 +1,29 @@
 # Progress
 
-### External Audit Resolution — Security, Model Validation & CI Integrity (2026-10-24)
+### External Audit Resolution — LLM Agent Governance & Tool Hardening (P0) (2026-10-28)
+
+- **Audit Items Resolved & Validated (5/5 P0 Fixes)**:
+  1. **Unificación de Gobernanza MCP en `ToolExecutor` (P0)**:
+     - Unificadas todas las herramientas MCP de análisis (`analysis_create_study`, `analysis_run_study`, `analysis_propose_experiment`, `analysis_verify_hypothesis`) y de recetas (`recipe_create_from_evidence`, `recipe_select`, `recipe_submit`, `recipe_promote`, `recipe_archive`) para transitar por `ToolExecutor` (`_execute_or_dispatch`).
+     - Respetada la regla: Las operaciones exploratorias/propuestas son `ToolEffect.PROPOSE` (pueden ser exploradas libremente dentro del presupuesto por el agente), mientras que las mutaciones con impacto (`recipe_submit`, `recipe_promote`, `recipe_archive`, `create_experiment`, `run_experiment`, `cancel_operation`) son `ToolEffect.MUTATE` y exigen aprobación humana verificable bajo política por defecto.
+     - Fallback retrocompatible para ejecuciones directas sin ejecutor explícito.
+  2. **Expiración Dinámica de Aprobaciones con TTL (P0)**:
+     - Reemplazada la fecha fija del año 2099 en `ToolExecutor` por un TTL dinámico configurable (`approval_ttl_seconds`, por defecto 86400s / 24h).
+     - Al invocar una herramienta con un `approval_id` vencido, se actualiza el estado en el ledger a `ApprovalStatus.EXPIRED` y se rechaza la llamada con `ToolErrorCode.PERMISSION_DENIED` y mensaje `"Approval request has expired"`.
+  3. **Contabilización y Límite de Folds en `AgentBudget` (P0)**:
+     - Añadidos `consumed_folds: int = 0` y método `remaining_folds() -> int` en `AgentBudget`.
+     - `can_afford()` ahora evalúa explícitamente `cost.get("folds", 0)` contra `max_folds`, impidiendo que el agente sobrepase el límite de particiones de cross-validation.
+     - `SqliteAgentLedger` inicializa y agrega `folds` en el presupuesto activo reservado.
+  4. **Cancelación Real de Procesos y Ejecuciones en `cancel_operation` (P0)**:
+     - `cancel_operation` ahora realiza la cancelación efectiva invocando `workspace.cancel_run(op.run_id)`.
+     - Además, despacha comandos `ControlJobCommand(job_id, action="cancel")` a `workspace.jobs`, cancelando los trabajos activos y liberando recursos del sistema sin fugas CQRS.
+  5. **Publicación de `optimize_experiment` en el Servidor MCP (P0)**:
+     - Publicada `@server.tool(name="optimize_experiment")` en el servidor MCP, gobernada por `ToolExecutor`, validada mediante esquemas JSON versionados y contabilizada en el ledger.
+- **Validation**:
+  - Nueva suite automatizada [tests/test_audit_p0_agent_governance.py](file:///home/fenic/workspace/ai-ml/CATML/tests/test_audit_p0_agent_governance.py) con 7/7 pruebas unitarias e integración pasando.
+  - Verificada la paridad y suites de MCP y recetas (`tests/test_v09_mcp_server.py`, `tests/test_explore_phase_e4_agent_surface.py`, `tests/test_explore_phase_e5_hypothesis_engine.py`, `tests/test_recipe_phase_r3_parity.py`, `tests/test_v09_agent_operations.py`, `tests/test_v09_agent_tools.py`, `tests/test_cqrs_architecture_guard.py`).
+  - Cobertura global verificada >= 85% (86.47%).
+
 
 - **Audit Items Resolved & Validated (8/8)**:
   1. **CI Workflow Error (P0)**: Replaced invalid `env.CATML_AUDIT_STRICT` with `vars.CATML_AUDIT_STRICT` in `.github/workflows/ci.yml` `continue-on-error`, restoring GitHub Actions workflow parsing.

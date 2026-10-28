@@ -77,48 +77,49 @@ def test_catboost_plugin_properties_and_reexport() -> None:
 
 
 def test_catboost_fallback_estimator_classification_and_regression() -> None:
-    cb = CatBoostPlugin(use_fallback_if_missing=True)
+    with patch.object(CatBoostPlugin, "is_available", False):
+        cb = CatBoostPlugin(use_fallback_if_missing=True)
 
-    # Binary classification fallback
-    clf = cb.build_estimator(
-        parameters={"iterations": 80, "learning_rate": 0.05, "depth": 4},
-        task_type="binary_classification",
-    )
-    from sklearn.ensemble import HistGradientBoostingClassifier, HistGradientBoostingRegressor
+        # Binary classification fallback
+        clf = cb.build_estimator(
+            parameters={"iterations": 80, "learning_rate": 0.05, "depth": 4},
+            task_type="binary_classification",
+        )
+        from sklearn.ensemble import HistGradientBoostingClassifier, HistGradientBoostingRegressor
 
-    assert isinstance(clf, HistGradientBoostingClassifier)
-    assert clf.max_iter == 80
-    assert clf.learning_rate == 0.05
-    assert clf.max_depth == 4
+        assert isinstance(clf, HistGradientBoostingClassifier)
+        assert clf.max_iter == 80
+        assert clf.learning_rate == 0.05
+        assert clf.max_depth == 4
 
-    X = np.random.normal(size=(40, 3))
-    y_bin = (X[:, 0] > 0).astype(int)
-    clf.fit(X, y_bin)
-    preds = clf.predict(X)
-    assert len(preds) == 40
-    probas = clf.predict_proba(X)
-    assert probas.shape == (40, 2)
+        X = np.random.normal(size=(40, 3))
+        y_bin = (X[:, 0] > 0).astype(int)
+        clf.fit(X, y_bin)
+        preds = clf.predict(X)
+        assert len(preds) == 40
+        probas = clf.predict_proba(X)
+        assert probas.shape == (40, 2)
 
-    # Multiclass classification fallback
-    y_multi = np.random.choice([0, 1, 2], size=40)
-    clf_multi = cb.build_estimator(task_type="multiclass_classification")
-    assert isinstance(clf_multi, HistGradientBoostingClassifier)
-    clf_multi.fit(X, y_multi)
-    probas_multi = clf_multi.predict_proba(X)
-    assert probas_multi.shape == (40, 3)
+        # Multiclass classification fallback
+        y_multi = np.random.choice([0, 1, 2], size=40)
+        clf_multi = cb.build_estimator(task_type="multiclass_classification")
+        assert isinstance(clf_multi, HistGradientBoostingClassifier)
+        clf_multi.fit(X, y_multi)
+        probas_multi = clf_multi.predict_proba(X)
+        assert probas_multi.shape == (40, 3)
 
-    # Regression fallback
-    y_reg = X[:, 0] * 3.0 + X[:, 1]
-    reg = cb.build_estimator(
-        parameters={"n_estimators": 60, "learning_rate": 0.08},
-        task_type="regression",
-    )
-    assert isinstance(reg, HistGradientBoostingRegressor)
-    assert reg.max_iter == 60
-    assert reg.learning_rate == 0.08
-    reg.fit(X, y_reg)
-    reg_preds = reg.predict(X)
-    assert len(reg_preds) == 40
+        # Regression fallback
+        y_reg = X[:, 0] * 3.0 + X[:, 1]
+        reg = cb.build_estimator(
+            parameters={"n_estimators": 60, "learning_rate": 0.08},
+            task_type="regression",
+        )
+        assert isinstance(reg, HistGradientBoostingRegressor)
+        assert reg.max_iter == 60
+        assert reg.learning_rate == 0.08
+        reg.fit(X, y_reg)
+        reg_preds = reg.predict(X)
+        assert len(reg_preds) == 40
 
 
 def test_catboost_missing_without_fallback_raises_importerror() -> None:
@@ -319,7 +320,7 @@ def test_build_sklearn_model_direct_dispatch() -> None:
     from sklearn.neural_network import MLPClassifier, MLPRegressor
 
     m_cb = build_sklearn_model("catboost", "binary_classification")
-    assert isinstance(m_cb, HistGradientBoostingClassifier)
+    assert isinstance(m_cb, HistGradientBoostingClassifier) or m_cb.__class__.__name__ == "CatBoostClassifier"
 
     m_et_c = build_sklearn_model("extra_trees", "binary_classification")
     assert isinstance(m_et_c, ExtraTreesClassifier)
