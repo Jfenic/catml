@@ -1480,6 +1480,7 @@ def create_full_tool_registry(
     # 19. recipe_create_from_evidence
     def _handle_recipe_create_from_evidence(args: dict[str, Any], _ctx: ToolCallContext) -> dict[str, Any]:
         from dataclasses import asdict, is_dataclass
+
         from automl.application.recipes.commands import CreateExperimentRecipeFromEvidenceCommand
         from automl.application.recipes.queries import GetExperimentRecipeQuery
 
@@ -1541,6 +1542,7 @@ def create_full_tool_registry(
     # 21. recipe_submit
     def _handle_recipe_submit(args: dict[str, Any], _ctx: ToolCallContext) -> dict[str, Any]:
         from dataclasses import asdict, is_dataclass
+
         from automl.application.recipes.commands import SubmitExperimentFromRecipeCommand
         from automl.application.recipes.queries import GetExperimentRecipeQuery
 
@@ -1587,6 +1589,7 @@ def create_full_tool_registry(
     # 22. recipe_promote
     def _handle_recipe_promote(args: dict[str, Any], _ctx: ToolCallContext) -> dict[str, Any]:
         from dataclasses import asdict, is_dataclass
+
         from automl.application.recipes.commands import PromoteExperimentRecipeCommand
         from automl.application.recipes.queries import GetExperimentRecipeQuery
 
